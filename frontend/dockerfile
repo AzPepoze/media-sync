@@ -5,8 +5,8 @@ COPY package.json pnpm-lock.yaml ./
 RUN npm install -g pnpm && pnpm install
 COPY . .
 # Set default backend URL for build time (can be overridden)
-ARG BACKEND_URL=http://localhost:3001
-ENV BACKEND_URL=$BACKEND_URL
+ARG VITE_BACKEND_URL=http://localhost:3001
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 RUN pnpm build
 
 # Run Stage

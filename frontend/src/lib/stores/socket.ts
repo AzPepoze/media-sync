@@ -17,7 +17,7 @@ export const roomState = writable<RoomState>({
 export const isWaitingForOthers = writable(false);
 
 // --- Actions ---
-const SERVER_URL = import.meta.env.BACKEND_URL || "http://localhost:3001";
+const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 let socketInstance: Socket;
 
 export function initSocket() {
