@@ -9,6 +9,7 @@ services:
              - PORT=3001
           networks:
              - sync-network
+          restart: always
 
      frontend:
           build:
@@ -25,13 +26,14 @@ services:
              - backend
           networks:
              - sync-network
+          restart: always
 
      tunnel:
           image: cloudflare/cloudflared:latest
-          restart: unless-stopped
+          restart: always
           command: tunnel run
           environment:
-             - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+             - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
           networks:
              - sync-network
 
