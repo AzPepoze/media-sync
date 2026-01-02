@@ -1,5 +1,6 @@
 services:
      backend:
+          container_name: media-sync-backend
           build:
                context: ./backend
                dockerfile: Dockerfile
@@ -12,6 +13,7 @@ services:
           restart: always
 
      frontend:
+          container_name: media-sync-frontend
           build:
                context: ./frontend
                dockerfile: Dockerfile
@@ -29,6 +31,7 @@ services:
           restart: always
 
      tunnel:
+          container_name: media-sync-tunnel
           image: cloudflare/cloudflared:latest
           restart: always
           command: tunnel run
