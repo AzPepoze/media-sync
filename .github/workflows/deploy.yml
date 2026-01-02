@@ -14,5 +14,6 @@ jobs:
 
              - name: Update and Restart Containers
                run: |
+                    cp /.env/media-sync .env
                     docker-compose up -d --build
                     docker image prune -f
