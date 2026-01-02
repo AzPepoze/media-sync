@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+     backend:
+          build:
+               context: ./backend
+               dockerfile: Dockerfile
+          ports:
+             - "3001:3001"
+          environment:
+             - PORT=3001
+          networks:
+             - sync-network
+
+     frontend:
+          build:
+               context: ./frontend
+               dockerfile: Dockerfile
+               args:
+                  - BACKEND_URL=${BACKEND_URL:-http://localhost:3001}
+          ports:
+             - "3000:3000"
+          environment:
+             - PORT=3000
+             - ORIGIN=${ORIGIN:-http://localhost:3000}
+          depends_on:
+             - backend
+          networks:
+             - sync-network
+
+     tunnel:
+          image: cloudflare/cloudflared:latest
+          restart: unless-stopped
+          command: tunnel run
+          environment:
+             - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+          networks:
+             - sync-network
+
+networks:
+     sync-network:
+          driver: bridge

@@ -1,0 +1,20 @@
+# Build Stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN npm install -g pnpm && pnpm install
+COPY . .
+# Set default backend URL for build time (can be overridden)
+ARG BACKEND_URL=http://localhost:3001
+ENV BACKEND_URL=$BACKEND_URL
+RUN pnpm build
+
+# Run Stage
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
+EXPOSE 3000
+ENV PORT=3000
+CMD ["node", "build"]
