@@ -1,3 +1,7 @@
+<svelte:head>
+	<title>Media Sync</title>
+</svelte:head>
+
 <slot />
 
 <style>
