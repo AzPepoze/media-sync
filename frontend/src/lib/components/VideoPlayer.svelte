@@ -190,18 +190,25 @@
 		if (!document.fullscreenElement) wrapper?.requestFullscreen();
 		else document.exitFullscreen();
 	}
-	function togglePip() {
-		if (document.pictureInPictureElement) {
-			document.exitPictureInPicture();
-		} else if (videoElement && videoElement.requestPictureInPicture) {
-			videoElement.requestPictureInPicture();
+	async function togglePip() {
+		try {
+			if (document.pictureInPictureElement) {
+				await document.exitPictureInPicture();
+			} else if (videoElement) {
+				if (typeof videoElement.requestPictureInPicture === "function") {
+					await videoElement.requestPictureInPicture();
+				} else if ((videoElement as any).webkitSetPresentationMode) {
+					(videoElement as any).webkitSetPresentationMode("picture-in-picture");
+				}
+			}
+		} catch (err) {
+			console.error("PiP failed:", err);
 		}
 	}
 	function skipTime(seconds: number) {
 		if (!videoElement) return;
 		const newTime = Math.max(0, Math.min(duration, videoElement.currentTime + seconds));
 		videoElement.currentTime = newTime;
-		// Emit seek immediately
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 	function showControlsTemp() {
@@ -217,6 +224,7 @@
 	<!-- svelte-ignore a11y-media-has-caption -->
 	<video
 		bind:this={videoElement}
+		playsinline
 		on:timeupdate={onTimeUpdate}
 		on:durationchange={onDurationChange}
 		on:play={onPlay}
@@ -264,27 +272,27 @@
 				</button>
 
 				<button class="icon-btn" on:click={() => skipTime(-5)} title="Rewind 5s">
-					<svg viewBox="0 0 24 24"
-						><path
+					<svg viewBox="0 0 24 24">
+						<path
 							fill="currentColor"
-							d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"
-							transform="scale(-1, 1) translate(-24, 0)"
-						/><text x="12" y="15" font-size="8" fill="white" font-weight="bold" text-anchor="middle"
-							>-5</text
-						></svg
-					>
+							d="M12.5,3C17.15,3 21.08,6.03 22.47,10.22L20.1,11C19.05,7.81 16.04,5.5 12.5,5.5C10.54,5.5 8.77,6.22 7.38,7.38L10,10H3V3L5.6,5.6C7.45,4 9.85,3 12.5,3Z"
+						/>
+						<text x="12.5" y="16" font-size="8" fill="white" font-weight="bold" text-anchor="middle"
+							>5</text
+						>
+					</svg>
 				</button>
+
 				<button class="icon-btn" on:click={() => skipTime(5)} title="Forward 5s">
-					<svg viewBox="0 0 24 24"
-						><path fill="currentColor" d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /><text
-							x="12"
-							y="15"
-							font-size="8"
-							fill="white"
-							font-weight="bold"
-							text-anchor="middle">+5</text
-						></svg
-					>
+					<svg viewBox="0 0 24 24">
+						<path
+							fill="currentColor"
+							d="M11.5,3C6.85,3 2.92,6.03 1.53,10.22L3.9,11C4.95,7.81 7.96,5.5 11.5,5.5C13.46,5.5 15.23,6.22 16.62,7.38L14,10H21V3L18.4,5.6C16.55,4 14.15,3 11.5,3Z"
+						/>
+						<text x="11.5" y="16" font-size="8" fill="white" font-weight="bold" text-anchor="middle"
+							>5</text
+						>
+					</svg>
 				</button>
 
 				<div class="volume-control">
@@ -389,7 +397,6 @@
 				&:hover {
 					height: 10px;
 				}
-
 				.progress-bg {
 					position: absolute;
 					top: 0;
@@ -399,7 +406,6 @@
 					background: rgba(255, 255, 255, 0.2);
 					border-radius: 5px;
 				}
-
 				.progress-buffered {
 					position: absolute;
 					top: 0;
@@ -409,7 +415,6 @@
 					border-radius: 5px;
 					transition: width 0.2s;
 				}
-
 				.progress-current {
 					position: absolute;
 					top: 0;
@@ -419,7 +424,6 @@
 					border-radius: 5px;
 					position: relative;
 					height: 100%;
-
 					&::after {
 						content: "";
 						position: absolute;
@@ -433,7 +437,6 @@
 						transition: opacity 0.2s;
 					}
 				}
-
 				&:hover .progress-current::after {
 					opacity: 1;
 				}
