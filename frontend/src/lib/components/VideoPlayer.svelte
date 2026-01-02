@@ -21,7 +21,7 @@
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
 
-	const SERVER_URL = import.meta.env.BACKEND_URL || "http://localhost:3001";
+	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
 	// Watch for URL changes from store
 	let currentLoadedReferer = "";
