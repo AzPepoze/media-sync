@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Hls from "hls.js";
-	import { socket, roomState, isWaitingForOthers, emitAction } from "../stores/socket";
+	import { socket, roomState, isWaitingForOthers, emitAction, currentRoomId } from "../stores/socket";
 
 	let videoElement: HTMLVideoElement;
 	let hls: Hls | null = null;
@@ -92,7 +92,7 @@
 				if (data.fatal) {
 					localIsBuffering = false;
 					currentLoadedUrl = "";
-					emitAction("buffering_end", "default-room");
+					emitAction("buffering_end", $currentRoomId);
 					if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls?.startLoad();
 					else hls?.destroy();
 				}
@@ -115,24 +115,30 @@
 	function onPlay() {
 		isPlaying = true;
 		if (!ignoreNextEvent && !$isWaitingForOthers)
-			emitAction("play", { roomId: "default-room", time: videoElement.currentTime });
+			emitAction("play", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
 	function onPause() {
 		isPlaying = false;
 		if (!ignoreNextEvent && !$isWaitingForOthers && !localIsBuffering)
-			emitAction("pause", { roomId: "default-room", time: videoElement.currentTime });
+			emitAction("pause", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
 	function onSeeked() {
-		if (!ignoreNextEvent) emitAction("seek", { roomId: "default-room", time: videoElement.currentTime });
+		if (!ignoreNextEvent) emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
 	function onWaiting() {
 		localIsBuffering = true;
-		emitAction("buffering_start", "default-room");
+		emitAction("buffering_start", $currentRoomId);
 	}
 	function onPlaying() {
 		if (localIsBuffering) {
 			localIsBuffering = false;
-			emitAction("buffering_end", "default-room");
+			emitAction("buffering_end", $currentRoomId);
+		}
+	}
+	function onCanPlay() {
+		if (localIsBuffering) {
+			localIsBuffering = false;
+			emitAction("buffering_end", $currentRoomId);
 		}
 	}
 
@@ -194,6 +200,7 @@
 		on:seeked={onSeeked}
 		on:waiting={onWaiting}
 		on:playing={onPlaying}
+		on:canplay={onCanPlay}
 		on:click={togglePlay}
 	></video>
 
@@ -290,6 +297,7 @@
 			align-items: center;
 			justify-content: center;
 			z-index: 10;
+			pointer-events: none;
 			.spinner {
 				width: 50px;
 				height: 50px;
