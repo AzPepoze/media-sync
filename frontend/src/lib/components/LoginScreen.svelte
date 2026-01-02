@@ -8,12 +8,25 @@
 	onMount(() => {
 		const savedNick = localStorage.getItem("nickname");
 		if (savedNick) nickname = savedNick;
+
+		const params = new URLSearchParams(window.location.search);
+		const roomParam = params.get("room_id");
+		if (roomParam) roomId = roomParam;
 	});
 
 	function handleJoin() {
-		if (nickname.trim()) {
-			joinRoom(roomId, nickname);
+		if (!nickname.trim()) return;
+		
+		// If roomId is empty, generate a random one
+		if (!roomId.trim()) {
+			roomId = Math.random().toString(36).substring(2, 8);
 		}
+		
+		joinRoom(roomId, nickname);
+	}
+
+	function generateRandomId() {
+		roomId = Math.random().toString(36).substring(2, 8);
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -35,7 +48,7 @@
 	<div class="form-section">
 		<div class="form-card">
 			<h2>:3</h2>
-			<p class="subtitle">Enter your details to join a room</p>
+			<p class="subtitle">Enter your details to join or create a room</p>
 
 			<div class="input-group">
 				<label for="nick">Nickname</label>
@@ -50,16 +63,25 @@
 
 			<div class="input-group">
 				<label for="room">Room ID</label>
-				<input
-					id="room"
-					type="text"
-					bind:value={roomId}
-					placeholder="whatever id as you like"
-					on:keydown={handleKeydown}
-				/>
+				<div class="room-input-wrapper">
+					<input
+						id="room"
+						type="text"
+						bind:value={roomId}
+						placeholder="Custom ID or leave blank for random"
+						on:keydown={handleKeydown}
+					/>
+					<button class="random-btn" on:click={generateRandomId} title="Generate random ID">
+						🎲
+					</button>
+				</div>
 			</div>
 
-			<button class="join-btn" on:click={handleJoin} disabled={!nickname}> Join Room </button>
+			<div class="actions">
+				<button class="join-btn" on:click={handleJoin} disabled={!nickname}>
+					{roomId ? 'Join / Create Room' : 'Create Random Room'}
+				</button>
+			</div>
 		</div>
 	</div>
 </div>
@@ -69,6 +91,8 @@
 	$bg-panel: #181b21;
 	$primary: #5865f2;
 	$primary-hover: #4752c4;
+	$secondary: #2f3136;
+	$secondary-hover: #40444b;
 	$text-main: #ffffff;
 	$text-muted: #b9bbbe;
 	$input-bg: #202225;
@@ -219,37 +243,61 @@
 						color: darken($text-muted, 20%);
 					}
 				}
+
+				.room-input-wrapper {
+					display: flex;
+					gap: 0.5rem;
+
+					input {
+						flex: 1;
+					}
+
+					.random-btn {
+						background: $input-bg;
+						border: 1px solid $border-color;
+						color: $text-main;
+						padding: 0 1rem;
+						border-radius: 8px;
+						cursor: pointer;
+						transition: all 0.2s ease;
+						font-size: 1.2rem;
+
+						&:hover {
+							background: $secondary-hover;
+							border-color: $text-muted;
+						}
+					}
+				}
+			}
+
+			.actions {
+				display: flex;
+				flex-direction: column;
+				gap: 1rem;
+				margin-top: 1rem;
 			}
 
 			.join-btn {
 				width: 100%;
 				padding: 1rem;
-				background: $primary;
-				color: white;
 				border: none;
 				border-radius: 8px;
 				font-size: 1rem;
 				font-weight: 600;
 				cursor: pointer;
 				transition: all 0.2s ease;
-				margin-top: 1rem;
+				background: $primary;
+				color: white;
 
-				&:hover {
+				&:hover:not(:disabled) {
 					background: $primary-hover;
 					transform: translateY(-1px);
 					box-shadow: 0 4px 12px rgba($primary, 0.3);
 				}
 
-				&:active {
-					transform: translateY(0);
-				}
-
 				&:disabled {
-					background: #36393f;
-					color: #72767d;
 					cursor: not-allowed;
-					transform: none;
-					box-shadow: none;
+					opacity: 0.6;
 				}
 			}
 		}

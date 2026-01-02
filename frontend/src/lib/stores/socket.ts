@@ -6,6 +6,7 @@ import type { User, RoomState } from "../types";
 export const socket = writable<Socket | null>(null);
 export const isConnected = writable(false);
 export const isJoined = writable(false);
+export const currentRoomId = writable<string>("");
 export const users = writable<User[]>([]);
 export const roomState = writable<RoomState>({
 	videoUrl: null,
@@ -62,7 +63,13 @@ export function joinRoom(roomId: string, nickname: string) {
 	if (!socketInstance) initSocket();
 	socketInstance.emit("join_room", { roomId, nickname });
 	localStorage.setItem("nickname", nickname);
+	currentRoomId.set(roomId);
 	isJoined.set(true);
+
+	// Update URL without reloading
+	const url = new URL(window.location.href);
+	url.searchParams.set("room_id", roomId);
+	window.history.pushState({}, "", url.toString());
 }
 
 export function setUrl(roomId: string, url: string, referer: string) {

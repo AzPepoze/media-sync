@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
-	import { isJoined, initSocket, cleanupSocket } from "$lib/stores/socket";
+	import { isJoined, initSocket, cleanupSocket, currentRoomId } from "$lib/stores/socket";
 	import LoginScreen from "$lib/components/LoginScreen.svelte";
 	import VideoPlayer from "$lib/components/VideoPlayer.svelte";
 	import UserList from "$lib/components/UserList.svelte";
@@ -24,7 +24,7 @@
 			<UrlBar />
 		</div>
 		<div class="sidebar-area">
-			<UserList roomId="default-room" />
+			<UserList roomId={$currentRoomId} />
 		</div>
 	</div>
 {/if}

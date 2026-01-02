@@ -1,18 +1,26 @@
 <script lang="ts">
-	import { roomState, setUrl } from "../stores/socket";
+	import { roomState, setUrl, currentRoomId } from "../stores/socket";
 
 	let inputUrl = "";
 	let refererUrl = "";
+	let showCopied = false;
 
-	// Auto-fill inputs when roomState changes (from server)
 	$: if ($roomState) {
 		if ($roomState.videoUrl) inputUrl = $roomState.videoUrl;
 		if ($roomState.referer) refererUrl = $roomState.referer;
 	}
 
 	function handleLoad() {
-		// Assume default room ID for now or pass it as prop if needed dynamic room ID handling later
-		setUrl("default-room", inputUrl, refererUrl);
+		if ($currentRoomId) {
+			setUrl($currentRoomId, inputUrl, refererUrl);
+		}
+	}
+
+	function copyRoomId() {
+		const inviteLink = `${window.location.origin}${window.location.pathname}?room_id=${$currentRoomId}`;
+		navigator.clipboard.writeText(inviteLink);
+		showCopied = true;
+		setTimeout(() => (showCopied = false), 2000);
 	}
 </script>
 
@@ -20,13 +28,14 @@
 	<div class="input-row">
 		<input type="text" bind:value={inputUrl} placeholder="Video URL (.m3u8 / .txt)" />
 		<input type="text" bind:value={refererUrl} placeholder="Referer URL (Optional)" />
-		<button on:click={handleLoad}>Load</button>
+		<button class="load-btn" on:click={handleLoad}>Load</button>
 	</div>
 </div>
 
 <style lang="scss">
 	$bg-panel: #181b21;
 	$primary: #5865f2;
+	$text-muted: #b9bbbe;
 
 	.url-control-panel {
 		margin-top: 1rem;
@@ -49,7 +58,7 @@
 					outline: none;
 				}
 			}
-			button {
+			.load-btn {
 				padding: 0 1.5rem;
 				background: $primary;
 				color: white;
