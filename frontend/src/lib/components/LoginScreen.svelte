@@ -3,7 +3,7 @@
 	import { joinRoom } from "../stores/socket";
 
 	let nickname = "";
-	let roomId = "default-room";
+	let roomId = "";
 
 	onMount(() => {
 		const savedNick = localStorage.getItem("nickname");
@@ -24,12 +24,12 @@
 
 		<div class="input-group">
 			<label for="nick">Nickname</label>
-			<input id="nick" type="text" bind:value={nickname} placeholder="e.g. Maple" />
+			<input id="nick" type="text" bind:value={nickname} placeholder="Your Nickname" />
 		</div>
 
 		<div class="input-group">
 			<label for="room">Room ID</label>
-			<input id="room" type="text" bind:value={roomId} />
+			<input id="room" type="text" bind:value={roomId} placeholder="ROOM id (Just set what ever you want)" />
 		</div>
 
 		<button class="join-btn" on:click={handleJoin} disabled={!nickname}> Join Room </button>
