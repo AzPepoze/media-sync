@@ -5,9 +5,19 @@
 	let refererUrl = "";
 	let showCopied = false;
 
+	// Track last synced values to prevent overwriting user input on unrelated store updates
+	let lastServerUrl: string | null = null;
+	let lastServerReferer: string | null = null;
+
 	$: if ($roomState) {
-		if ($roomState.videoUrl) inputUrl = $roomState.videoUrl;
-		if ($roomState.referer) refererUrl = $roomState.referer;
+		if ($roomState.videoUrl !== lastServerUrl) {
+			inputUrl = $roomState.videoUrl || "";
+			lastServerUrl = $roomState.videoUrl;
+		}
+		if ($roomState.referer !== lastServerReferer) {
+			refererUrl = $roomState.referer || "";
+			lastServerReferer = $roomState.referer;
+		}
 	}
 
 	function handleLoad() {
