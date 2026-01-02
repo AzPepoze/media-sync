@@ -1,18 +1,18 @@
 name: Deploy on Local Machine
 
 on:
-  push:
-    branches: [ "main" ]
+     push:
+          branches: [ "main" ]
 
 jobs:
-  deploy:
-    runs-on: self-hosted
+     deploy:
+          runs-on: self-hosted
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+          steps:
+             - name: Checkout code
+               uses: actions/checkout@v3
 
-      - name: Update and Restart Containers
-        run: |
-          docker-compose up -d --build
-          docker image prune -f
+             - name: Update and Restart Containers
+               run: |
+                    docker-compose up -d --build
+                    docker image prune -f
