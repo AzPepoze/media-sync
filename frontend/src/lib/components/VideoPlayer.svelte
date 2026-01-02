@@ -78,6 +78,16 @@
 	}
 
 	function loadVideo(url: string, referer: string) {
+		// Reset local state for new video
+		localIsBuffering = true;
+		currentTime = 0;
+		buffered = 0;
+		isPlaying = false;
+		if (videoElement) {
+			videoElement.pause();
+			videoElement.currentTime = 0;
+		}
+
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
 		let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
@@ -180,6 +190,20 @@
 		if (!document.fullscreenElement) wrapper?.requestFullscreen();
 		else document.exitFullscreen();
 	}
+	function togglePip() {
+		if (document.pictureInPictureElement) {
+			document.exitPictureInPicture();
+		} else if (videoElement && videoElement.requestPictureInPicture) {
+			videoElement.requestPictureInPicture();
+		}
+	}
+	function skipTime(seconds: number) {
+		if (!videoElement) return;
+		const newTime = Math.max(0, Math.min(duration, videoElement.currentTime + seconds));
+		videoElement.currentTime = newTime;
+		// Emit seek immediately
+		emitAction("seek", { roomId: $currentRoomId, time: newTime });
+	}
 	function showControlsTemp() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
@@ -232,12 +256,37 @@
 
 		<div class="controls-row">
 			<div class="left-controls">
-				<button class="icon-btn" on:click={togglePlay}>
+				<button class="icon-btn" on:click={togglePlay} title={isPlaying ? "Pause" : "Play"}>
 					{#if isPlaying}<svg viewBox="0 0 24 24"
 							><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg
 						>
 					{:else}<svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z" /></svg>{/if}
 				</button>
+
+				<button class="icon-btn" on:click={() => skipTime(-5)} title="Rewind 5s">
+					<svg viewBox="0 0 24 24"
+						><path
+							fill="currentColor"
+							d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"
+							transform="scale(-1, 1) translate(-24, 0)"
+						/><text x="12" y="15" font-size="8" fill="white" font-weight="bold" text-anchor="middle"
+							>-5</text
+						></svg
+					>
+				</button>
+				<button class="icon-btn" on:click={() => skipTime(5)} title="Forward 5s">
+					<svg viewBox="0 0 24 24"
+						><path fill="currentColor" d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" /><text
+							x="12"
+							y="15"
+							font-size="8"
+							fill="white"
+							font-weight="bold"
+							text-anchor="middle">+5</text
+						></svg
+					>
+				</button>
+
 				<div class="volume-control">
 					<button class="icon-btn" on:click={toggleMute}>
 						{#if isMuted || volume === 0}<svg viewBox="0 0 24 24"
@@ -258,7 +307,15 @@
 				<span class="time-display">{formatTime(currentTime)} / {formatTime(duration)}</span>
 			</div>
 			<div class="right-controls">
-				<button class="icon-btn" on:click={toggleFullscreen}>
+				<button class="icon-btn" on:click={togglePip} title="Picture-in-Picture">
+					<svg viewBox="0 0 24 24"
+						><path
+							fill="currentColor"
+							d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"
+						/></svg
+					>
+				</button>
+				<button class="icon-btn" on:click={toggleFullscreen} title="Fullscreen">
 					<svg viewBox="0 0 24 24"
 						><path
 							fill="currentColor"
@@ -332,6 +389,7 @@
 				&:hover {
 					height: 10px;
 				}
+
 				.progress-bg {
 					position: absolute;
 					top: 0;
@@ -341,6 +399,7 @@
 					background: rgba(255, 255, 255, 0.2);
 					border-radius: 5px;
 				}
+
 				.progress-buffered {
 					position: absolute;
 					top: 0;
@@ -350,6 +409,7 @@
 					border-radius: 5px;
 					transition: width 0.2s;
 				}
+
 				.progress-current {
 					position: absolute;
 					top: 0;
@@ -358,6 +418,8 @@
 					background: $primary;
 					border-radius: 5px;
 					position: relative;
+					height: 100%;
+
 					&::after {
 						content: "";
 						position: absolute;
@@ -371,6 +433,7 @@
 						transition: opacity 0.2s;
 					}
 				}
+
 				&:hover .progress-current::after {
 					opacity: 1;
 				}
