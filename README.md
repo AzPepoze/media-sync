@@ -14,27 +14,43 @@ This app allows multiple users to watch a video at the exact same time. It synch
 
 You need to start both the server and the client:
 
-**Backend (Server):**
+
+
+**Backend:** (Runs on port 3001)
 
 ```bash
+
 cd backend
+
 pnpm install
+
 pnpm dev
+
 ```
 
-**Frontend (Client):**
+
+
+**Frontend:** (Runs on port 5173 for dev, 3000 for Docker/Production)
 
 ```bash
+
 cd frontend
+
 pnpm install
+
 pnpm dev
+
 ```
+
+
 
 ### 2. Join a Room
 
--    Open the app in your browser (usually `http://localhost:5173`).
--    Enter your **Nickname** and a **Room ID**.
--    Click **Join Room**.
+- Open the app in your browser (usually `http://localhost:5173` for dev or `http://localhost:3000` for Docker).
+
+- Enter your **Nickname** and a **Room ID**.
+
+- Click **Join Room**.
 
 ### 3. Load a Video
 
