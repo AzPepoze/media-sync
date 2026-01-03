@@ -50,6 +50,15 @@ export function initSocket() {
 		isWaitingForOthers.set(isBuffering);
 	});
 
+	socketInstance.on("player_action", (data: { action: string; time: number }) => {
+		roomState.update((s) => ({
+			...s,
+			isPlaying: data.action === "play",
+			currentTime: data.time,
+			lastUpdated: Date.now(),
+		}));
+	});
+
 	// Note: 'player_action' is handled directly in VideoPlayer to avoid store latency
 }
 

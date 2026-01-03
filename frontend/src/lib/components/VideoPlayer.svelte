@@ -61,8 +61,10 @@
 			const diff = Math.abs(videoElement.currentTime - data.time);
 			if (diff > 0.5) videoElement.currentTime = data.time;
 			if (data.action === "play") {
-				videoElement.play().catch(() => {});
 				isPlaying = true;
+				videoElement.play().catch(() => {
+					isPlaying = false;
+				});
 			} else if (data.action === "pause") {
 				videoElement.pause();
 				isPlaying = false;
@@ -154,7 +156,7 @@
 					}
 				}
 				// Re-enable events after a short delay
-				setTimeout(() => { ignoreNextEvent = false; }, 1000);
+				setTimeout(() => { ignoreNextEvent = false; }, 2000);
 			});
 
 			hls.loadSource(videoUrl);
@@ -200,7 +202,7 @@
 				videoElement.play().catch(() => {});
 			}
 			// Re-enable events after a short delay
-			setTimeout(() => { ignoreNextEvent = false; }, 1000);
+			setTimeout(() => { ignoreNextEvent = false; }, 2000);
 		}
 	}
 
@@ -244,7 +246,7 @@
 	}
 	function onPlay() {
 		isPlaying = true;
-		if (!ignoreNextEvent && !$isWaitingForOthers)
+		if (!ignoreNextEvent && !$isWaitingForOthers && !localIsBuffering)
 			emitAction("play", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
 	function onPause() {

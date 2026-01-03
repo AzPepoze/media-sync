@@ -15,9 +15,11 @@ app.use("/", proxyRoutes);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
 	cors: {
-		origin: "*", // In production, replace with specific client URL
+		origin: process.env.FRONTEND_URL || "http://localhost:3000",
 		methods: ["GET", "POST"],
 	},
+	pingInterval: 10000, // Check connection every 10 seconds
+	pingTimeout: 20000, // Wait 20 seconds before disconnecting
 });
 
 io.on("connection", (socket) => {
