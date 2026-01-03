@@ -27,8 +27,8 @@
 	async function fetchRandomBackground() {
 		isBgLoading = true;
 		try {
-			const targetUrl = `https://konachan.net/post.json?limit=1&tags=order:random+rating:safe&_t=${Date.now()}`;
-			const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+			const targetUrl = `https://konachan.net/post.json?limit=1&tags=order:random+rating:safe`;
+			const proxyUrl = `https://proxy.azpepoze.workers.dev/?url=${encodeURIComponent(targetUrl)}`;
 			const res = await fetch(proxyUrl);
 			const data = await res.json();
 
