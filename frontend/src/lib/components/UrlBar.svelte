@@ -36,7 +36,7 @@
 
 <div class="url-control-panel">
 	<div class="input-row">
-		<input type="text" bind:value={inputUrl} placeholder="Video URL (.m3u8 / .txt)" />
+		<input type="text" bind:value={inputUrl} placeholder="Video URL (mp4 / .m3u8 / .txt)" />
 		<input type="text" bind:value={refererUrl} placeholder="Referer URL (Optional)" />
 		<button class="load-btn" on:click={handleLoad}>Load</button>
 	</div>
