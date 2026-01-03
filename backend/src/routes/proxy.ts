@@ -130,6 +130,14 @@ router.get("/proxy", async (req: Request, res: Response) => {
 		const finalResourceUrl = (response.request as any).res?.responseUrl || targetUrl;
 		const contentType = response.headers["content-type"] || "";
 
+		// [CHECK] If upstream returns error (e.g. 403, 404), forward it immediately
+		if (response.status >= 400) {
+			res.status(response.status);
+			if (contentType) res.setHeader("Content-Type", contentType);
+			response.data.pipe(res);
+			return;
+		}
+
 		// Check if it looks like a manifest based on URL or Content-Type
 		const isManifest =
 			targetUrl.toLowerCase().includes(".m3u8") ||
@@ -150,6 +158,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
 
 			response.data.on("end", () => {
 				const buffer = Buffer.concat(chunks);
+				// Axios handles decompression, so we can just convert to string
 				const manifestText = buffer.toString("utf-8");
 
 				// Double check content signature just to be safe
@@ -177,8 +186,11 @@ router.get("/proxy", async (req: Request, res: Response) => {
 
 			// Forward critical headers for streaming
 			if (contentType) res.setHeader("Content-Type", contentType);
-			if (response.headers["content-length"])
-				res.setHeader("Content-Length", response.headers["content-length"]);
+
+			// NOTE: We do NOT forward Content-Length or Content-Encoding here.
+			// Since Axios decompresses the stream, the size changes, so the original Content-Length is invalid.
+			// We let Node.js handle the transfer encoding (Chunked) automatically.
+
 			if (response.headers["accept-ranges"]) res.setHeader("Accept-Ranges", response.headers["accept-ranges"]);
 			if (response.headers["content-range"]) res.setHeader("Content-Range", response.headers["content-range"]);
 
