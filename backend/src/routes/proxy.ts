@@ -16,6 +16,16 @@ interface ProxyRequestQuery {
 
 // Helper Functions
 
+const getServerBaseUrl = (req: Request): string => {
+	// Prioritize X-Forwarded-Proto header because the app is likely behind a reverse proxy
+	// that terminates SSL. req.protocol might default to 'http' if 'trust proxy' isn't set.
+	let protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+	if (Array.isArray(protocol)) protocol = protocol[0];
+	if (protocol.includes(",")) protocol = protocol.split(",")[0].trim();
+
+	return `${protocol}://${req.get("host")}`;
+};
+
 const createProxiedUrl = (targetUrl: string, serverBaseUrl: string, referer?: string): string => {
 	try {
 		const encodedUrl = encodeURIComponent(targetUrl);
@@ -76,7 +86,7 @@ router.get("/hls-manifest", (req: Request, res: Response) => {
 	const { url, referer } = req.query as unknown as ProxyRequestQuery;
 	if (!url) return res.status(400).send("Missing 'url' parameter");
 
-	const serverBaseUrl = `${req.protocol}://${req.get("host")}`;
+	const serverBaseUrl = getServerBaseUrl(req);
 	const targetUrl = createProxiedUrl(url, serverBaseUrl, referer);
 	res.redirect(targetUrl);
 });
@@ -89,7 +99,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
 	}
 
 	try {
-		const serverBaseUrl = `${req.protocol}://${req.get("host")}`;
+		const serverBaseUrl = getServerBaseUrl(req);
 		const requestHeaders: Record<string, string> = {
 			"User-Agent": DEFAULT_USER_AGENT,
 		};
