@@ -23,7 +23,6 @@
 	let seekHoverTime = 0;
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
-	let isDraggingSeek = false;
 
 	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
@@ -73,107 +72,58 @@
 		});
 	}
 
-			function loadVideo(url: string, referer: string) {
+	function loadVideo(url: string, referer: string) {
+		localIsBuffering = true;
+		currentTime = 0;
+		buffered = 0;
+		isPlaying = false;
+		if (videoElement) {
+			videoElement.pause();
+			videoElement.currentTime = 0;
+		}
+		currentLoadedUrl = url;
+		currentLoadedReferer = referer;
+		let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
+		if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
 
-				localIsBuffering = true;
-
-				currentTime = 0;
-
-				buffered = 0;
-
-				isPlaying = false;
-
-				if (videoElement) {
-
-					videoElement.pause();
-
-					videoElement.currentTime = 0;
-
+		if (Hls.isSupported()) {
+			if (hls) hls.destroy();
+			hls = new Hls({ capLevelToPlayerSize: true });
+			hls.loadSource(proxyUrl);
+			hls.attachMedia(videoElement);
+			hls.on(Hls.Events.ERROR, (e, data) => {
+				if (data.fatal) {
+					localIsBuffering = false;
+					currentLoadedUrl = "";
+					emitAction("buffering_end", $currentRoomId);
+					if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls?.startLoad();
+					else hls?.destroy();
 				}
-
-				currentLoadedUrl = url;
-
-				currentLoadedReferer = referer;
-
-		
-
-				// Use Manifest-only proxy to bypass CORS/Referer for the .m3u8 file
-
-				let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
-
-				if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
-
-		
-
-				if (Hls.isSupported()) {
-
-					if (hls) hls.destroy();
-
-					hls = new Hls({ capLevelToPlayerSize: true });
-
-					hls.loadSource(proxyUrl);
-
-					hls.attachMedia(videoElement);
-
-					hls.on(Hls.Events.ERROR, (e, data) => {
-
-						if (data.fatal) {
-
-							localIsBuffering = false;
-
-							currentLoadedUrl = "";
-
-							emitAction("buffering_end", $currentRoomId);
-
-							if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls?.startLoad();
-
-							else hls?.destroy();
-
-						}
-
-					});
-
-					if (peekHls) { peekHls.destroy(); peekHls = null; }
-
-				} else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
-
-					videoElement.src = proxyUrl;
-
-				}
-
+			});
+			if (peekHls) {
+				peekHls.destroy();
+				peekHls = null;
 			}
+		} else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
+			videoElement.src = proxyUrl;
+		}
+	}
 
-		
-
-			function initPeekHls() {
-
-				if (!currentLoadedUrl || peekHls) return;
-
-				
-
-				let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(currentLoadedUrl)}`;
-
-				if (currentLoadedReferer) proxyUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
-
-		
-
-				if (Hls.isSupported()) {
-
-					peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, maxMaxBufferLength: 2, startLevel: 0 });
-
-					peekHls.on(Hls.Events.MANIFEST_PARSED, () => { if (peekHls) peekHls.currentLevel = 0; });
-
-					peekHls.loadSource(proxyUrl);
-
-					peekHls.attachMedia(peekVideo);
-
-				} else if (peekVideo) {
-
-					peekVideo.src = proxyUrl;
-
-				}
-
-			}
+	function initPeekHls() {
+		if (!currentLoadedUrl || peekHls) return;
+		let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(currentLoadedUrl)}`;
+		if (currentLoadedReferer) proxyUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
+		if (Hls.isSupported()) {
+			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, maxMaxBufferLength: 2, startLevel: 0 });
+			peekHls.on(Hls.Events.MANIFEST_PARSED, () => {
+				if (peekHls) peekHls.currentLevel = 0;
+			});
+			peekHls.loadSource(proxyUrl);
+			peekHls.attachMedia(peekVideo);
+		} else if (peekVideo) {
+			peekVideo.src = proxyUrl;
+		}
+	}
 
 	function onTimeUpdate() {
 		currentTime = videoElement.currentTime;
@@ -194,11 +144,11 @@
 		if (!ignoreNextEvent && !$isWaitingForOthers && !localIsBuffering)
 			emitAction("pause", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
-		function onSeeked() { 
-			if (!ignoreNextEvent && !isDraggingSeek) {
-				emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime }); 
-			}
+	function onSeeked() {
+		if (!ignoreNextEvent) {
+			emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
 		}
+	}
 	function onWaiting() {
 		localIsBuffering = true;
 		emitAction("buffering_start", $currentRoomId);
@@ -220,136 +170,14 @@
 		isPlaying ? videoElement.pause() : videoElement.play();
 	}
 
-			function updateSeek(clientX: number) {
-
-				const bar = document.querySelector(".progress-bar-container");
-
-				if (!bar || !videoElement || !duration) return;
-
-				const rect = bar.getBoundingClientRect();
-
-				let percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-
-				const newTime = percent * duration;
-
-				
-
-				// Update local video and preview for immediate feedback
-
-				videoElement.currentTime = newTime;
-
-				seekHoverPercent = percent;
-
-				seekHoverTime = newTime;
-
-				
-
-				if (peekVideo && !isNaN(seekHoverTime)) {
-
-					peekVideo.currentTime = seekHoverTime;
-
-				}
-
-			}
-
-	
-
-		function handleMouseDownSeek(e: MouseEvent) {
-
-			if (e.button !== 0) return;
-
-			isDraggingSeek = true;
-
-			isHoveringSeek = true;
-
-			if (!peekHls) initPeekHls();
-
-			updateSeek(e.clientX);
-
-			window.addEventListener("mousemove", handleMouseMoveSeek);
-
-			window.addEventListener("mouseup", handleMouseUpSeek);
-
-		}
-
-	
-
-		function handleMouseMoveSeek(e: MouseEvent) {
-
-			if (isDraggingSeek) updateSeek(e.clientX);
-
-		}
-
-	
-
-		function handleMouseUpSeek() {
-
-			if (isDraggingSeek) {
-
-				isDraggingSeek = false;
-
-				// Finally update the main video and sync
-
-				videoElement.currentTime = seekHoverTime;
-
-				emitAction("seek", { roomId: $currentRoomId, time: seekHoverTime });
-
-			}
-
-			window.removeEventListener("mousemove", handleMouseMoveSeek);
-
-			window.removeEventListener("mouseup", handleMouseUpSeek);
-
-		}
-
-	
-
-		function handleTouchStartSeek(e: TouchEvent) {
-
-			isDraggingSeek = true;
-
-			isHoveringSeek = true;
-
-			if (!peekHls) initPeekHls();
-
-			updateSeek(e.touches[0].clientX);
-
-		}
-
-	
-
-		function handleTouchMoveSeek(e: TouchEvent) {
-
-			if (isDraggingSeek) {
-
-				updateSeek(e.touches[0].clientX);
-
-				if (e.cancelable) e.preventDefault();
-
-			}
-
-		}
-
-	
-
-		function handleTouchEndSeek() {
-
-			if (isDraggingSeek) {
-
-				isDraggingSeek = false;
-
-				isHoveringSeek = false;
-
-				videoElement.currentTime = seekHoverTime;
-
-				emitAction("seek", { roomId: $currentRoomId, time: seekHoverTime });
-
-			}
-
-		}
+	function handleSeek(e: MouseEvent) {
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const percent = (e.clientX - rect.left) / rect.width;
+		const newTime = percent * duration;
+		videoElement.currentTime = newTime;
+	}
 
 	function handleSeekHover(e: MouseEvent) {
-		if (isDraggingSeek) return;
 		if (!peekHls) initPeekHls();
 		isHoveringSeek = true;
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -406,91 +234,62 @@
 			}, 3000);
 	}
 
-		function handleVideoClick() {
+	function handleVideoClick() {
+		if (window.innerWidth < 768) {
+			showControls = !showControls;
+			if (showControls) showControlsTemp();
+		} else togglePlay();
+	}
 
-			if (window.innerWidth < 768) { showControls = !showControls; if (showControls) showControlsTemp(); }
+	function handleKeydown(e: KeyboardEvent) {
+		const target = e.target as HTMLElement;
+		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
 
-			else togglePlay();
-
+		switch (e.key.toLowerCase()) {
+			case " ":
+				e.preventDefault();
+				togglePlay();
+				showControlsTemp();
+				break;
+			case "k":
+				togglePlay();
+				showControlsTemp();
+				break;
+			case "arrowleft":
+				skipTime(-5);
+				showControlsTemp();
+				break;
+			case "arrowright":
+				skipTime(5);
+				showControlsTemp();
+				break;
+			case "f":
+				toggleFullscreen();
+				break;
+			case "m":
+				toggleMute();
+				break;
 		}
+	}
+</script>
 
-	
+<svelte:window on:keydown={handleKeydown} />
 
-		function handleKeydown(e: KeyboardEvent) {
-
-			// Don't trigger if user is typing in an input or textarea
-
-			const target = e.target as HTMLElement;
-
-			if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-
-	
-
-			switch (e.key.toLowerCase()) {
-
-				case " ":
-
-					e.preventDefault(); // Prevent page scroll
-
-					togglePlay();
-
-					showControlsTemp();
-
-					break;
-
-				case "k": // YouTube style play/pause
-
-					togglePlay();
-
-					showControlsTemp();
-
-					break;
-
-				case "arrowleft":
-
-					skipTime(-5);
-
-					showControlsTemp();
-
-					break;
-
-				case "arrowright":
-
-					skipTime(5);
-
-					showControlsTemp();
-
-					break;
-
-				case "f":
-
-					toggleFullscreen();
-
-					break;
-
-				case "m":
-
-					toggleMute();
-
-					break;
-
-			}
-
-		}
-
-	</script>
-
-	
-
-	<svelte:window on:keydown={handleKeydown} />
-
-	
-
-	<div class="player-container" on:mousemove={showControlsTemp} on:mouseleave={() => (showControls = false)}>
-
-		<!-- svelte-ignore a11y-media-has-caption -->
-
-		<video bind:this={videoElement} playsinline on:timeupdate={onTimeUpdate} on:durationchange={onDurationChange} on:play={onPlay} on:pause={onPause} on:seeked={onSeeked} on:waiting={onWaiting} on:playing={onPlaying} on:canplay={onCanPlay} on:click={handleVideoClick}></video>
+<div class="player-container" on:mousemove={showControlsTemp} on:mouseleave={() => (showControls = false)}>
+	<!-- svelte-ignore a11y-media-has-caption -->
+	<video
+		bind:this={videoElement}
+		playsinline
+		on:timeupdate={onTimeUpdate}
+		on:durationchange={onDurationChange}
+		on:play={onPlay}
+		on:pause={onPause}
+		on:seeked={onSeeked}
+		on:waiting={onWaiting}
+		on:playing={onPlaying}
+		on:canplay={onCanPlay}
+		on:click={handleVideoClick}
+	></video>
 
 	{#if $isWaitingForOthers || localIsBuffering}
 		<div class="loading-overlay">
@@ -509,13 +308,8 @@
 		<div
 			class="progress-bar-container"
 			on:mousemove={handleSeekHover}
-			on:mouseleave={() => {
-				if (!isDraggingSeek) isHoveringSeek = false;
-			}}
-			on:mousedown={handleMouseDownSeek}
-			on:touchstart={handleTouchStartSeek}
-			on:touchmove={handleTouchMoveSeek}
-			on:touchend={handleTouchEndSeek}
+			on:mouseleave={() => (isHoveringSeek = false)}
+			on:click={handleSeek}
 		>
 			<div class="progress-bg"></div>
 			<div class="progress-buffered" style="width: {buffered}%"></div>
