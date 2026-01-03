@@ -16,23 +16,11 @@ interface ProxyRequestQuery {
 
 // Helper Functions
 
-const isHlsManifest = (contentType: string | undefined, dataSnippet: string): boolean => {
-	return (
-		(contentType?.includes("mpegurl") ?? false) ||
-		(contentType?.includes("apple.mpegurl") ?? false) ||
-		dataSnippet.trim().startsWith("#EXTM3U")
-	);
-};
-
 const createProxiedUrl = (targetUrl: string, serverBaseUrl: string, referer?: string): string => {
 	try {
 		const encodedUrl = encodeURIComponent(targetUrl);
 		let proxyUrl = `${serverBaseUrl}/proxy?url=${encodedUrl}`;
-
-		if (referer) {
-			proxyUrl += `&referer=${encodeURIComponent(referer)}`;
-		}
-
+		if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
 		return proxyUrl;
 	} catch (error) {
 		return targetUrl;
@@ -57,23 +45,18 @@ const rewriteManifestContent = (
 
 	const rewrittenLines = lines.map((line) => {
 		const trimmedLine = line.trim();
-
 		if (!trimmedLine) return line;
 
+		// 1. Handle URLs inside tags like URI="...", etc.
 		if (trimmedLine.startsWith("#")) {
-			if (trimmedLine.includes("URI=")) {
-				return trimmedLine.replace(
-					/(URI=["']?)([^"'\s>]+)(["']?)/gi,
-					(match, prefix, originalUri, suffix) => {
-						const absoluteUri = resolveAbsoluteUrl(originalUri, manifestBaseUrl);
-						const proxiedUri = createProxiedUrl(absoluteUri, serverBaseUrl, referer);
-						return `${prefix}${proxiedUri}${suffix}`;
-					}
-				);
-			}
-			return line;
+			return trimmedLine.replace(/(URI=["']?)([^"'\s>]+)(["']?)/gi, (match, prefix, originalUri, suffix) => {
+				const absoluteUri = resolveAbsoluteUrl(originalUri, manifestBaseUrl);
+				const proxiedUri = createProxiedUrl(absoluteUri, serverBaseUrl, referer);
+				return `${prefix}${proxiedUri}${suffix}`;
+			});
 		}
 
+		// 2. Handle plain URL lines
 		const absoluteSegmentUrl = resolveAbsoluteUrl(trimmedLine, manifestBaseUrl);
 		return createProxiedUrl(absoluteSegmentUrl, serverBaseUrl, referer);
 	});
@@ -85,14 +68,10 @@ const rewriteManifestContent = (
 
 router.get("/hls-manifest", (req: Request, res: Response) => {
 	const { url, referer } = req.query as unknown as ProxyRequestQuery;
-
-	if (!url) {
-		return res.status(400).send("Missing 'url' parameter");
-	}
+	if (!url) return res.status(400).send("Missing 'url' parameter");
 
 	const serverBaseUrl = `${req.protocol}://${req.get("host")}`;
 	const targetUrl = createProxiedUrl(url, serverBaseUrl, referer);
-
 	res.redirect(targetUrl);
 });
 
@@ -104,55 +83,78 @@ router.get("/proxy", async (req: Request, res: Response) => {
 	}
 
 	try {
-		const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-		const host = req.get("host");
-		const serverBaseUrl = `${protocol}://${host}`;
-
+		const serverBaseUrl = `${req.protocol}://${req.get("host")}`;
 		const requestHeaders: Record<string, string> = {
 			"User-Agent": DEFAULT_USER_AGENT,
 		};
+
+		// Support Range Requests for MP4 seeking/instant playback
+		if (req.headers.range) {
+			requestHeaders["Range"] = req.headers.range;
+		}
 
 		if (referer) {
 			requestHeaders["Referer"] = referer;
 			try {
 				requestHeaders["Origin"] = new URL(referer).origin;
-			} catch (error) {
-				// Ignore error
-			}
+			} catch (e) {}
 		}
 
 		const axiosConfig: AxiosRequestConfig = {
+			url: targetUrl,
+			method: "GET",
 			headers: requestHeaders,
-			responseType: "arraybuffer",
-			timeout: 30000,
+			responseType: "stream", // Use stream to handle large files and instant playback
+			timeout: 60000,
 			maxRedirects: 5,
-			validateStatus: (status) => status < 400,
+			validateStatus: () => true, // Pass through all status codes (200, 206, 302, etc.)
 		};
 
-		const response = await axios.get(targetUrl, axiosConfig);
-		const finalResourceUrl = response.request.res.responseUrl || targetUrl;
-		const contentType = response.headers["content-type"];
-		const responseBuffer = response.data as Buffer;
+		const response = await axios(axiosConfig);
+		const finalResourceUrl = (response.request as any).res?.responseUrl || targetUrl;
+		const contentType = response.headers["content-type"] || "";
 
-		const dataSnippet = responseBuffer.subarray(0, 50).toString("utf-8");
+		// Logic to detect if it's a manifest that needs rewriting
+		const isManifest =
+			targetUrl.toLowerCase().includes(".m3u8") ||
+			targetUrl.toLowerCase().includes(".txt") ||
+			contentType.includes("mpegurl") ||
+			contentType.includes("apple.mpegurl");
 
-		if (isHlsManifest(contentType, dataSnippet)) {
-			const manifestText = responseBuffer.toString("utf-8");
-			const rewrittenManifest = rewriteManifestContent(manifestText, finalResourceUrl, serverBaseUrl, referer);
+		// Essential CORS and Range headers
+		res.setHeader("Access-Control-Allow-Origin", "*");
+		res.setHeader("Accept-Ranges", "bytes");
+		if (contentType) res.setHeader("Content-Type", contentType);
+		if (response.headers["content-range"]) res.setHeader("Content-Range", response.headers["content-range"]);
+		if (response.headers["content-length"]) res.setHeader("Content-Length", response.headers["content-length"]);
 
-			res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.send(rewrittenManifest);
+		if (isManifest) {
+			// Buffer manifest text to rewrite it
+			let chunks: any[] = [];
+			response.data.on("data", (chunk: any) => chunks.push(chunk));
+			response.data.on("end", () => {
+				const manifestText = Buffer.concat(chunks).toString("utf-8");
+				const rewrittenManifest = rewriteManifestContent(
+					manifestText,
+					finalResourceUrl,
+					serverBaseUrl,
+					referer
+				);
+				res.send(rewrittenManifest);
+			});
 		} else {
-			res.setHeader("Content-Type", contentType || "application/octet-stream");
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.send(responseBuffer);
+			// Stream binary data directly for performance and range support
+			res.status(response.status);
+			response.data.pipe(res);
+
+			req.on("close", () => {
+				if (response.data) response.data.destroy();
+			});
 		}
 	} catch (error: any) {
-		if (axios.isAxiosError(error)) {
-			res.status(error.response?.status || 500).send("Error fetching resource");
-		} else {
-			res.status(500).send("Internal Server Error");
+		console.error(`[Proxy Error] ${targetUrl.substring(0, 50)}:`, error.message);
+		if (!res.headersSent) {
+			res.status(500).send("Error fetching resource");
 		}
 	}
 });

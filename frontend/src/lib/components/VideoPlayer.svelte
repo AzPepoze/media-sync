@@ -84,16 +84,11 @@
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
 
-		// AUTO-CHECK: Use proxy only for manifests (.m3u8, .txt)
-		const isHls = url.toLowerCase().includes(".m3u8") || url.toLowerCase().includes(".txt");
-		let videoUrl = url;
-		
-		if (isHls) {
-			videoUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
-			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
-		}
+		// USE PROXY FOR EVERYTHING to ensure CORS compliance
+		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
+		if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
 
-		if (Hls.isSupported()) {
+		if (Hls.isSupported() && (url.toLowerCase().includes(".m3u8") || url.toLowerCase().includes(".txt"))) {
 			if (hls) hls.destroy();
 			hls = new Hls({ capLevelToPlayerSize: true });
 			hls.loadSource(videoUrl);
@@ -108,7 +103,9 @@
 				}
 			});
 			if (peekHls) { peekHls.destroy(); peekHls = null; }
-		} else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
+		} else {
+			// For direct video files like .mp4, .webm, etc.
+			if (hls) { hls.destroy(); hls = null; }
 			videoElement.src = videoUrl;
 		}
 	}
@@ -116,15 +113,11 @@
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
 		
-		const isHls = currentLoadedUrl.toLowerCase().includes(".m3u8") || currentLoadedUrl.toLowerCase().includes(".txt");
-		let videoUrl = currentLoadedUrl;
-		
-		if (isHls) {
-			videoUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(currentLoadedUrl)}`;
-			if (currentLoadedReferer) videoUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
-		}
+		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(currentLoadedUrl)}`;
+		if (currentLoadedReferer) videoUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
 
-		if (Hls.isSupported()) {
+		// Only use HLS for Peek if it's an HLS source
+		if (Hls.isSupported() && (currentLoadedUrl.toLowerCase().includes(".m3u8") || currentLoadedUrl.toLowerCase().includes(".txt"))) {
 			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, maxMaxBufferLength: 2, startLevel: 0 });
 			peekHls.on(Hls.Events.MANIFEST_PARSED, () => { if (peekHls) peekHls.currentLevel = 0; });
 			peekHls.loadSource(videoUrl);
