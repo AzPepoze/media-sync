@@ -83,13 +83,20 @@
 		}
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
-		let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
-		if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
+
+		// AUTO-CHECK: Use proxy only for manifests (.m3u8, .txt)
+		const isHls = url.toLowerCase().includes(".m3u8") || url.toLowerCase().includes(".txt");
+		let videoUrl = url;
+		
+		if (isHls) {
+			videoUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
+			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
+		}
 
 		if (Hls.isSupported()) {
 			if (hls) hls.destroy();
 			hls = new Hls({ capLevelToPlayerSize: true });
-			hls.loadSource(proxyUrl);
+			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
 			hls.on(Hls.Events.ERROR, (e, data) => {
 				if (data.fatal) {
@@ -100,28 +107,30 @@
 					else hls?.destroy();
 				}
 			});
-			if (peekHls) {
-				peekHls.destroy();
-				peekHls = null;
-			}
+			if (peekHls) { peekHls.destroy(); peekHls = null; }
 		} else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
-			videoElement.src = proxyUrl;
+			videoElement.src = videoUrl;
 		}
 	}
 
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
-		let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(currentLoadedUrl)}`;
-		if (currentLoadedReferer) proxyUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
+		
+		const isHls = currentLoadedUrl.toLowerCase().includes(".m3u8") || currentLoadedUrl.toLowerCase().includes(".txt");
+		let videoUrl = currentLoadedUrl;
+		
+		if (isHls) {
+			videoUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(currentLoadedUrl)}`;
+			if (currentLoadedReferer) videoUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
+		}
+
 		if (Hls.isSupported()) {
 			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, maxMaxBufferLength: 2, startLevel: 0 });
-			peekHls.on(Hls.Events.MANIFEST_PARSED, () => {
-				if (peekHls) peekHls.currentLevel = 0;
-			});
-			peekHls.loadSource(proxyUrl);
+			peekHls.on(Hls.Events.MANIFEST_PARSED, () => { if (peekHls) peekHls.currentLevel = 0; });
+			peekHls.loadSource(videoUrl);
 			peekHls.attachMedia(peekVideo);
 		} else if (peekVideo) {
-			peekVideo.src = proxyUrl;
+			peekVideo.src = videoUrl;
 		}
 	}
 
