@@ -7,6 +7,7 @@
 		removeFromCollection,
 		renameCollection,
 		renameCollectionItem,
+		updateCollectionItem,
 		exportCollectionsJson,
 		importCollectionsJson,
 		exportCollectionJson,
@@ -22,6 +23,15 @@
 	let activeCollectionId: string | null = null;
 	let fileInput: HTMLInputElement;
 
+	// Edit states
+	let editingCollectionId: string | null = null;
+	let editCollectionName = "";
+
+	let editingItemId: string | null = null;
+	let editItemTitle = "";
+	let editItemUrl = "";
+	let editItemReferer = "";
+
 	function handleAddCollection() {
 		if (newCollectionName.trim()) {
 			addCollection(newCollectionName);
@@ -29,18 +39,50 @@
 		}
 	}
 
-	function handleRenameCollection(id: string, currentName: string) {
-		const newName = prompt("Enter new collection name:", currentName);
-		if (newName && newName.trim() !== "") {
-			renameCollection(id, newName.trim());
-		}
+	function startRenameCollection(id: string, currentName: string) {
+		editingCollectionId = id;
+		editCollectionName = currentName;
 	}
 
-	function handleRenameItem(collectionId: string, itemId: string, currentTitle: string) {
-		const newTitle = prompt("Enter new video title:", currentTitle);
-		if (newTitle && newTitle.trim() !== "") {
-			renameCollectionItem(collectionId, itemId, newTitle.trim());
+	function saveRenameCollection(id: string) {
+		if (editCollectionName.trim() !== "") {
+			renameCollection(id, editCollectionName.trim());
 		}
+		editingCollectionId = null;
+		editCollectionName = "";
+	}
+
+	function cancelRenameCollection() {
+		editingCollectionId = null;
+		editCollectionName = "";
+	}
+
+	function startEditItem(id: string, current: { title: string; url: string; referer?: string }) {
+		editingItemId = id;
+		editItemTitle = current.title;
+		editItemUrl = current.url;
+		editItemReferer = current.referer || "";
+	}
+
+	function saveEditItem(collectionId: string, itemId: string) {
+		if (editItemTitle.trim() && editItemUrl.trim()) {
+			updateCollectionItem(collectionId, itemId, {
+				title: editItemTitle.trim(),
+				url: editItemUrl.trim(),
+				referer: editItemReferer.trim() || undefined,
+			});
+		}
+		editingItemId = null;
+		editItemTitle = "";
+		editItemUrl = "";
+		editItemReferer = "";
+	}
+
+	function cancelEditItem() {
+		editingItemId = null;
+		editItemTitle = "";
+		editItemUrl = "";
+		editItemReferer = "";
 	}
 
 	function handleAddItem(collectionId: string) {
@@ -149,40 +191,63 @@
 		{#each $collections as collection (collection.id)}
 			<div class="collection-item">
 				<div class="collection-header">
-					<span
-						class="name"
-						on:dblclick={() => handleRenameCollection(collection.id, collection.name)}
-						title="Double click to rename"
-						role="button"
-						tabindex="0">{collection.name}</span
-					>
-					<div class="controls">
-						<button
-							class="sm-btn"
-							on:click={() => handleRenameCollection(collection.id, collection.name)}
-							title="Rename"
-						>
-							✎
-						</button>
-						<button
-							class="sm-btn"
-							on:click={() => handleExportCollection(collection.id, collection.name)}
-							title="Export this collection"
-						>
-							Export
-						</button>
-						<button
-							class="sm-btn"
-							on:click={() =>
-								(activeCollectionId =
-									activeCollectionId === collection.id ? null : collection.id)}
-						>
-							{activeCollectionId === collection.id ? "Done" : "+ Video"}
-						</button>
-						<button class="sm-btn danger" on:click={() => deleteCollection(collection.id)}
-							>Delete</button
-						>
-					</div>
+					{#if editingCollectionId === collection.id}
+						<div class="edit-collection-form">
+							<input
+								type="text"
+								bind:value={editCollectionName}
+								placeholder="Collection Name"
+								on:keydown={(e) => {
+									if (e.key === "Enter") saveRenameCollection(collection.id);
+									if (e.key === "Escape") cancelRenameCollection();
+								}}
+								autoFocus
+							/>
+							<div class="edit-controls">
+								<button class="sm-btn highlight" on:click={() => saveRenameCollection(collection.id)}
+									>Save</button
+								>
+								<button class="sm-btn secondary" on:click={cancelRenameCollection}>Cancel</button>
+							</div>
+						</div>
+					{:else}
+						<div class="header-content">
+							<span
+								class="name"
+								on:dblclick={() => startRenameCollection(collection.id, collection.name)}
+								title="Double click to rename"
+								role="button"
+								tabindex="0">{collection.name}</span
+							>
+							<div class="controls">
+								<button
+									class="sm-btn primary-action"
+									on:click={() => startRenameCollection(collection.id, collection.name)}
+									title="Rename"
+								>
+									✎ Rename
+								</button>
+								<button
+									class="sm-btn"
+									on:click={() => handleExportCollection(collection.id, collection.name)}
+									title="Export this collection"
+								>
+									Export
+								</button>
+								<button
+									class="sm-btn highlight"
+									on:click={() =>
+										(activeCollectionId =
+											activeCollectionId === collection.id ? null : collection.id)}
+								>
+									{activeCollectionId === collection.id ? "Done" : "+ Add Video"}
+								</button>
+								<button class="sm-btn danger" on:click={() => deleteCollection(collection.id)}
+									>Delete</button
+								>
+							</div>
+						</div>
+					{/if}
 				</div>
 
 				{#if activeCollectionId === collection.id}
@@ -201,30 +266,38 @@
 
 				<div class="items-list">
 					{#each collection.items as item (item.id)}
-						<div class="media-item">
-							<div
-								class="info"
-								on:click={() => playItem(item)}
-								role="button"
-								tabindex="0"
-								on:keypress={(e) => e.key === "Enter" && playItem(item)}
-							>
-								<span class="title">▶ {item.title}</span>
+						{#if editingItemId === item.id}
+							<div class="edit-item-form">
+								<input type="text" bind:value={editItemTitle} placeholder="Title" />
+								<input type="text" bind:value={editItemUrl} placeholder="URL" />
+								<input type="text" bind:value={editItemReferer} placeholder="Referer" />
+								<div class="edit-controls">
+									<button class="sm-btn highlight" on:click={() => saveEditItem(collection.id, item.id)}
+										>Save</button
+									>
+									<button class="sm-btn secondary" on:click={cancelEditItem}>Cancel</button>
+								</div>
 							</div>
-							<div class="item-controls">
-								<button
-									class="xs-btn"
-									on:click={() => handleRenameItem(collection.id, item.id, item.title)}
-									title="Rename"
-								>
-									✎
-								</button>
-								<button
-									class="xs-btn danger"
-									on:click={() => removeFromCollection(collection.id, item.id)}>x</button
-								>
-							</div>
-						</div>
+						{:else}
+														<div class="media-item">
+															<button class="play-btn" on:click={() => playItem(item)} title="Play Video">
+																▶
+															</button>
+															<div class="info">
+																<span class="title">{item.title}</span>
+																<span class="url">{item.url}</span>
+															</div>
+															<div class="item-controls">
+																<button class="sm-btn" on:click={() => startEditItem(item.id, item)} title="Edit">
+																	Edit
+																</button>
+																<button
+																	class="sm-btn danger"
+																	on:click={() => removeFromCollection(collection.id, item.id)}>Delete</button
+																>
+															</div>
+														</div>
+						{/if}
 					{/each}
 					{#if collection.items.length === 0}
 						<div class="empty-msg">No videos</div>
@@ -300,13 +373,39 @@
 				}
 			}
 			&.sm-btn {
-				font-size: 0.8rem;
-				padding: 2px 6px;
-			}
-			&.xs-btn {
-				font-size: 0.7rem;
-				padding: 0 4px;
-				line-height: 1.2;
+				font-size: 0.85rem;
+				padding: 6px 12px;
+				min-width: 60px;
+				background: #3a3e44;
+				transition: all 0.2s;
+
+				&:hover {
+					background: #4f545c;
+				}
+
+				&.danger {
+					background: rgba($danger, 0.8);
+					&:hover {
+						background: $danger;
+					}
+				}
+
+				&.primary-action {
+					background: rgba($primary, 0.2);
+					border: 1px solid rgba($primary, 0.4);
+					&:hover {
+						background: rgba($primary, 0.3);
+						border-color: $primary;
+					}
+				}
+
+				&.highlight {
+					background: $primary;
+					font-weight: 600;
+					&:hover {
+						background: lighten($primary, 5%);
+					}
+				}
 			}
 		}
 
@@ -347,13 +446,17 @@
 			.collection-header {
 				background: #202225;
 				padding: 0.5rem;
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
 				font-weight: bold;
+
+				.header-content {
+					display: flex;
+					flex-direction: column;
+					gap: 8px;
+				}
 
 				.name {
 					cursor: pointer;
+					font-size: 1rem;
 					&:hover {
 						text-decoration: underline;
 					}
@@ -362,18 +465,32 @@
 				.controls {
 					display: flex;
 					gap: 5px;
+					flex-wrap: wrap;
+				}
+
+				.edit-collection-form {
+					display: flex;
+					flex-direction: column;
+					gap: 5px;
+
+					.edit-controls {
+						display: flex;
+						gap: 5px;
+					}
 				}
 			}
 		}
 
-		.add-item-form {
+		.add-item-form,
+		.edit-item-form {
 			padding: 0.5rem;
 			background: #292b2f;
 			display: flex;
 			flex-direction: column;
 			gap: 5px;
 
-			.form-actions {
+			.form-actions,
+			.edit-controls {
 				display: flex;
 				gap: 5px;
 				margin-top: 5px;
@@ -389,28 +506,62 @@
 
 		.media-item {
 			display: flex;
-			justify-content: space-between;
 			align-items: center;
 			background: #2f3136;
-			padding: 4px 8px;
+			padding: 8px;
 			border-radius: 4px;
 			font-size: 0.9rem;
+			gap: 10px;
+
+			.play-btn {
+				background: $primary;
+				color: white;
+				border: none;
+				border-radius: 50%;
+				width: 32px;
+				height: 32px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+				flex-shrink: 0;
+				font-size: 0.8rem;
+				transition: transform 0.2s;
+
+				&:hover {
+					transform: scale(1.1);
+					filter: brightness(1.1);
+				}
+			}
 
 			.info {
-				cursor: pointer;
-				overflow: hidden;
-				text-overflow: ellipsis;
-				white-space: nowrap;
+				display: flex;
+				flex-direction: column;
 				flex: 1;
-				margin-right: 5px;
-				&:hover {
-					color: $primary;
+				min-width: 0; // Allows ellipsis to work in flex
+				gap: 2px;
+
+				.title {
+					font-weight: 500;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+				}
+
+				.url {
+					font-size: 0.75rem;
+					color: $text-muted;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+					opacity: 0.8;
 				}
 			}
 
 			.item-controls {
 				display: flex;
-				gap: 2px;
+				gap: 5px;
+				flex-shrink: 0;
 			}
 		}
 

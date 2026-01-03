@@ -131,6 +131,29 @@ export function renameCollectionItem(collectionId: string, itemId: string, newTi
 	);
 }
 
+export function updateCollectionItem(
+	collectionId: string,
+	itemId: string,
+	updates: Partial<Omit<PlaylistItem, "id">>
+) {
+	collections.update((cols) =>
+		cols.map((c) => {
+			if (c.id === collectionId) {
+				return {
+					...c,
+					items: c.items.map((i) => {
+						if (i.id === itemId) {
+							return { ...i, ...updates };
+						}
+						return i;
+					}),
+				};
+			}
+			return c;
+		})
+	);
+}
+
 export function exportCollectionsJson(): string {
 	return JSON.stringify(get(collections), null, 2);
 }

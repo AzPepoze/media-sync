@@ -45,7 +45,12 @@
 	let currentLoadedReferer = "";
 	$: if ($roomState.videoUrl) {
 		if ($roomState.videoUrl !== currentLoadedUrl || $roomState.referer !== currentLoadedReferer) {
-			loadVideo($roomState.videoUrl, $roomState.referer || "");
+			let startTime = $roomState.currentTime;
+			if ($roomState.isPlaying && $roomState.lastUpdated) {
+				const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
+				startTime += elapsed;
+			}
+			loadVideo($roomState.videoUrl, $roomState.referer || "", startTime, $roomState.isPlaying);
 		}
 	}
 
@@ -103,16 +108,21 @@
 		return lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt");
 	}
 
-	function loadVideo(url: string, referer: string) {
+	function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
 		localIsBuffering = true;
+		emitAction("buffering_start", $currentRoomId);
 		hasError = false;
 		errorMessage = "";
-		currentTime = 0;
+		currentTime = startTime;
 		buffered = 0;
-		isPlaying = false;
+		isPlaying = shouldPlay;
+		
+		// Prevent emitting events during initial load/seek
+		ignoreNextEvent = true;
+
 		if (videoElement) {
 			videoElement.pause();
-			videoElement.currentTime = 0;
+			videoElement.currentTime = startTime;
 			// Reset src to ensure clean state before loading new content
 			videoElement.removeAttribute("src");
 			videoElement.load();
@@ -135,6 +145,18 @@
 				levelLoadingMaxRetry: 0,
 				fragLoadingMaxRetry: 1 // Allow 1 retry for fragments to handle temporary jitters
 			});
+			
+			hls.on(Hls.Events.MANIFEST_PARSED, () => {
+				if (videoElement) {
+					videoElement.currentTime = startTime;
+					if (shouldPlay) {
+						videoElement.play().catch(() => {});
+					}
+				}
+				// Re-enable events after a short delay
+				setTimeout(() => { ignoreNextEvent = false; }, 1000);
+			});
+
 			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
 			hls.on(Hls.Events.ERROR, (e, data) => {
@@ -171,7 +193,14 @@
 		} else {
 			// For direct video files like .mp4, .webm, etc. use Proxy URL
 			videoElement.src = videoUrl;
+			videoElement.currentTime = startTime;
 			videoElement.load();
+			if (shouldPlay) {
+				// We need to wait for canplay to play usually, but try here
+				videoElement.play().catch(() => {});
+			}
+			// Re-enable events after a short delay
+			setTimeout(() => { ignoreNextEvent = false; }, 1000);
 		}
 	}
 

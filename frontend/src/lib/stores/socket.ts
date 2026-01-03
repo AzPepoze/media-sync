@@ -42,12 +42,6 @@ export function initSocket() {
 		roomState.set(state);
 	});
 
-	socketInstance.on("url_changed", (data: any) => {
-		const url = typeof data === "string" ? data : data.url;
-		const referer = typeof data === "object" ? data.referer : "";
-		roomState.update((s) => ({ ...s, videoUrl: url, referer: referer }));
-	});
-
 	socketInstance.on("room_users", (list: User[]) => {
 		users.set(list);
 	});

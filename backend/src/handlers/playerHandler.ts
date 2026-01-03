@@ -7,8 +7,9 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 			rooms[roomId].videoUrl = url;
 			rooms[roomId].referer = referer || null;
 			rooms[roomId].currentTime = 0;
-			rooms[roomId].isPlaying = false;
-			io.to(roomId).emit("url_changed", { url, referer: rooms[roomId].referer });
+			rooms[roomId].isPlaying = true;
+			rooms[roomId].lastUpdated = Date.now();
+			io.to(roomId).emit("sync_state", rooms[roomId]);
 		}
 	});
 
