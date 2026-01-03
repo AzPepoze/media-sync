@@ -56,7 +56,7 @@
 		.input-row {
 			display: flex;
 			gap: 10px;
-			
+
 			@media (max-width: 768px) {
 				flex-direction: column;
 			}

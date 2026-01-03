@@ -31,11 +31,11 @@
 			const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
 			const res = await fetch(proxyUrl);
 			const data = await res.json();
-			
+
 			if (data && data.length > 0) {
 				const post = data[0];
 				const imgUrl = post.sample_url || post.file_url;
-				
+
 				const img = new Image();
 				img.src = imgUrl;
 				img.onload = () => {
@@ -84,10 +84,10 @@
 
 <div class="login-container">
 	<!-- Fullscreen Background Layer -->
-	<div 
-		class="background-layer" 
+	<div
+		class="background-layer"
 		class:visible={isBgReady}
-		style={backgroundUrl ? `background-image: url('${backgroundUrl}');` : ''}
+		style={backgroundUrl ? `background-image: url('${backgroundUrl}');` : ""}
 	></div>
 
 	<!-- Left Side: Brand -->
@@ -180,20 +180,28 @@
 
 		.background-layer {
 			position: absolute;
-			top: 0; left: 0; width: 100%; height: 100%;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
 			background-size: cover;
 			background-position: center;
 			opacity: 0;
 			transition: opacity 1.2s ease-in-out;
 			z-index: 0;
-			&.visible { opacity: 1; }
+			&.visible {
+				opacity: 1;
+			}
 		}
 
 		// Global dark overlay for contrast on the image
 		&::after {
 			content: "";
 			position: absolute;
-			top: 0; left: 0; width: 100%; height: 100%;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
 			background: rgba(0, 0, 0, 0.25);
 			z-index: 0;
 			pointer-events: none;
@@ -233,7 +241,7 @@
 				font-weight: 800;
 				margin: 0;
 				color: white;
-				text-shadow: 0 4px 15px rgba(0,0,0,0.8);
+				text-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
 				letter-spacing: -1px;
 			}
 
@@ -243,7 +251,7 @@
 				margin-top: 1rem;
 				max-width: 400px;
 				line-height: 1.5;
-				text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+				text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
 			}
 		}
 	}
@@ -262,8 +270,8 @@
 			max-width: 420px;
 			padding: 2.5rem;
 			// Floating Glassmorphism Card
-			background: rgba(24, 27, 33, 0.8); 
-			backdrop-filter: blur(20px); 
+			background: rgba(24, 27, 33, 0.8);
+			backdrop-filter: blur(20px);
 			-webkit-backdrop-filter: blur(20px);
 			border: 1px solid rgba(255, 255, 255, 0.1);
 			border-radius: 20px;
@@ -274,7 +282,7 @@
 				color: $text-main;
 				margin-bottom: 0.5rem;
 				font-weight: 700;
-				text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+				text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 			}
 
 			.subtitle {
@@ -312,7 +320,9 @@
 				.room-input-wrapper {
 					display: flex;
 					gap: 0.5rem;
-					input { flex: 1; }
+					input {
+						flex: 1;
+					}
 					.random-btn {
 						background: rgba(32, 34, 37, 0.6);
 						border: 1px solid rgba(255, 255, 255, 0.1);
@@ -321,7 +331,9 @@
 						border-radius: 10px;
 						cursor: pointer;
 						transition: all 0.2s;
-						&:hover { background: rgba(64, 68, 75, 0.8); }
+						&:hover {
+							background: rgba(64, 68, 75, 0.8);
+						}
 					}
 				}
 			}
@@ -346,7 +358,10 @@
 					transform: translateY(-2px);
 					box-shadow: 0 8px 20px rgba($primary, 0.4);
 				}
-				&:disabled { opacity: 0.6; cursor: not-allowed; }
+				&:disabled {
+					opacity: 0.6;
+					cursor: not-allowed;
+				}
 			}
 		}
 	}
@@ -371,8 +386,9 @@
 			gap: 0.5rem;
 			padding: 0.2rem 0;
 			.spinner {
-				width: 12px; height: 12px;
-				border: 2px solid rgba(255,255,255,0.3);
+				width: 12px;
+				height: 12px;
+				border: 2px solid rgba(255, 255, 255, 0.3);
 				border-top-color: white;
 				border-radius: 50%;
 				animation: spin 0.8s linear infinite;
@@ -384,21 +400,39 @@
 			gap: 0.5rem;
 		}
 		.refresh-btn {
-			background: transparent; border: none; color: white; cursor: pointer;
-			font-size: 1rem; opacity: 0.8;
-			&:hover { transform: rotate(30deg); opacity: 1; }
+			background: transparent;
+			border: none;
+			color: white;
+			cursor: pointer;
+			font-size: 1rem;
+			opacity: 0.8;
+			&:hover {
+				transform: rotate(30deg);
+				opacity: 1;
+			}
 		}
 		.download-link {
 			color: lighten($primary, 15%);
 			text-decoration: none;
 			font-weight: bold;
-			&:hover { text-decoration: underline; }
+			&:hover {
+				text-decoration: underline;
+			}
 		}
 	}
 
-	@keyframes spin { to { transform: rotate(360deg); } }
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
 	@media (max-width: 768px) {
-		.brand-section { flex: 0 0 auto; padding: 2rem 0; }
-		.form-section { padding: 1rem; }
+		.brand-section {
+			flex: 0 0 auto;
+			padding: 2rem 0;
+		}
+		.form-section {
+			padding: 1rem;
+		}
 	}
 </style>

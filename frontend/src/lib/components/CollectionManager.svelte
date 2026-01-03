@@ -189,19 +189,10 @@
 					<div class="add-item-form">
 						<input type="text" bind:value={newItemTitle} placeholder="Title" />
 						<input type="text" bind:value={newItemUrl} placeholder="URL" />
-						<input
-							type="text"
-							bind:value={newItemReferer}
-							placeholder="Referer (Optional)"
-						/>
+						<input type="text" bind:value={newItemReferer} placeholder="Referer (Optional)" />
 						<div class="form-actions">
-							<button on:click={() => handleAddItem(collection.id)}
-								>Add</button
-							>
-							<button
-								class="secondary"
-								on:click={() =>
-									handleAddCurrentVideo(collection.id)}
+							<button on:click={() => handleAddItem(collection.id)}>Add</button>
+							<button class="secondary" on:click={() => handleAddCurrentVideo(collection.id)}
 								>Add Current</button
 							>
 						</div>
@@ -230,9 +221,7 @@
 								</button>
 								<button
 									class="xs-btn danger"
-									on:click={() =>
-										removeFromCollection(collection.id, item.id)}
-									>x</button
+									on:click={() => removeFromCollection(collection.id, item.id)}>x</button
 								>
 							</div>
 						</div>

@@ -78,10 +78,7 @@ export function renameCollection(collectionId: string, newName: string) {
 	);
 }
 
-export function addToCollection(
-	collectionId: string,
-	item: Omit<PlaylistItem, "id">
-) {
+export function addToCollection(collectionId: string, item: Omit<PlaylistItem, "id">) {
 	collections.update((cols) =>
 		cols.map((c) => {
 			if (c.id === collectionId) {
@@ -101,10 +98,7 @@ export function addToCollection(
 	);
 }
 
-export function removeFromCollection(
-	collectionId: string,
-	itemId: string
-) {
+export function removeFromCollection(collectionId: string, itemId: string) {
 	collections.update((cols) =>
 		cols.map((c) => {
 			if (c.id === collectionId) {
@@ -118,11 +112,7 @@ export function removeFromCollection(
 	);
 }
 
-export function renameCollectionItem(
-	collectionId: string,
-	itemId: string,
-	newTitle: string
-) {
+export function renameCollectionItem(collectionId: string, itemId: string, newTitle: string) {
 	collections.update((cols) =>
 		cols.map((c) => {
 			if (c.id === collectionId) {

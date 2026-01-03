@@ -1,14 +1,17 @@
 <script lang="ts">
 	import Hls from "hls.js";
 	import { socket, roomState, isWaitingForOthers, emitAction, currentRoomId } from "../stores/socket";
+	import SeekTooltip from "./player/SeekTooltip.svelte";
+	import Controls from "./player/Controls.svelte";
 
 	let videoElement: HTMLVideoElement;
+	let peekVideo: HTMLVideoElement;
 	let hls: Hls | null = null;
+	let peekHls: Hls | null = null;
 	let currentLoadedUrl = "";
 	let ignoreNextEvent = false;
 	let localIsBuffering = false;
 
-	// --- Local Player UI State ---
 	let isPlaying = false;
 	let currentTime = 0;
 	let duration = 0;
@@ -20,10 +23,10 @@
 	let seekHoverTime = 0;
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
+	let isDraggingSeek = false;
 
 	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
-	// Watch for URL changes from store
 	let currentLoadedReferer = "";
 	$: if ($roomState.videoUrl) {
 		if ($roomState.videoUrl !== currentLoadedUrl || $roomState.referer !== currentLoadedReferer) {
@@ -31,15 +34,12 @@
 		}
 	}
 
-	// React to socket events directly for performance
 	$: if ($socket) {
 		$socket.on("player_action", (data: { action: string; time: number }) => {
 			ignoreNextEvent = true;
 			if (!videoElement) return;
-
 			const diff = Math.abs(videoElement.currentTime - data.time);
 			if (diff > 0.5) videoElement.currentTime = data.time;
-
 			if (data.action === "play") {
 				videoElement.play().catch(() => {});
 				isPlaying = true;
@@ -52,7 +52,6 @@
 			}, 500);
 		});
 
-		// Sync Waiting Logic
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (isBuffering) {
 				if (!videoElement.paused) {
@@ -63,56 +62,119 @@
 						ignoreNextEvent = false;
 					}, 100);
 				}
-			} else {
-				// Resume if room is supposed to be playing
-				if ($roomState.isPlaying && videoElement.paused && !localIsBuffering) {
-					ignoreNextEvent = true;
-					videoElement.play().catch(() => {});
-					isPlaying = true;
-					setTimeout(() => {
-						ignoreNextEvent = false;
-					}, 100);
-				}
+			} else if ($roomState.isPlaying && videoElement.paused && !localIsBuffering) {
+				ignoreNextEvent = true;
+				videoElement.play().catch(() => {});
+				isPlaying = true;
+				setTimeout(() => {
+					ignoreNextEvent = false;
+				}, 100);
 			}
 		});
 	}
 
-	function loadVideo(url: string, referer: string) {
-		// Reset local state for new video
-		localIsBuffering = true;
-		currentTime = 0;
-		buffered = 0;
-		isPlaying = false;
-		if (videoElement) {
-			videoElement.pause();
-			videoElement.currentTime = 0;
-		}
+			function loadVideo(url: string, referer: string) {
 
-		currentLoadedUrl = url;
-		currentLoadedReferer = referer;
-		let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
-		if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
+				localIsBuffering = true;
 
-		if (Hls.isSupported()) {
-			if (hls) hls.destroy();
-			hls = new Hls();
-			hls.loadSource(proxyUrl);
-			hls.attachMedia(videoElement);
-			hls.on(Hls.Events.ERROR, (e, data) => {
-				if (data.fatal) {
-					localIsBuffering = false;
-					currentLoadedUrl = "";
-					emitAction("buffering_end", $currentRoomId);
-					if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls?.startLoad();
-					else hls?.destroy();
+				currentTime = 0;
+
+				buffered = 0;
+
+				isPlaying = false;
+
+				if (videoElement) {
+
+					videoElement.pause();
+
+					videoElement.currentTime = 0;
+
 				}
-			});
-		} else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
-			videoElement.src = proxyUrl;
-		}
-	}
 
-	// --- Video Events ---
+				currentLoadedUrl = url;
+
+				currentLoadedReferer = referer;
+
+		
+
+				// Use Manifest-only proxy to bypass CORS/Referer for the .m3u8 file
+
+				let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(url)}`;
+
+				if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
+
+		
+
+				if (Hls.isSupported()) {
+
+					if (hls) hls.destroy();
+
+					hls = new Hls({ capLevelToPlayerSize: true });
+
+					hls.loadSource(proxyUrl);
+
+					hls.attachMedia(videoElement);
+
+					hls.on(Hls.Events.ERROR, (e, data) => {
+
+						if (data.fatal) {
+
+							localIsBuffering = false;
+
+							currentLoadedUrl = "";
+
+							emitAction("buffering_end", $currentRoomId);
+
+							if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls?.startLoad();
+
+							else hls?.destroy();
+
+						}
+
+					});
+
+					if (peekHls) { peekHls.destroy(); peekHls = null; }
+
+				} else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
+
+					videoElement.src = proxyUrl;
+
+				}
+
+			}
+
+		
+
+			function initPeekHls() {
+
+				if (!currentLoadedUrl || peekHls) return;
+
+				
+
+				let proxyUrl = `${SERVER_URL}/hls-manifest?url=${encodeURIComponent(currentLoadedUrl)}`;
+
+				if (currentLoadedReferer) proxyUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
+
+		
+
+				if (Hls.isSupported()) {
+
+					peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, maxMaxBufferLength: 2, startLevel: 0 });
+
+					peekHls.on(Hls.Events.MANIFEST_PARSED, () => { if (peekHls) peekHls.currentLevel = 0; });
+
+					peekHls.loadSource(proxyUrl);
+
+					peekHls.attachMedia(peekVideo);
+
+				} else if (peekVideo) {
+
+					peekVideo.src = proxyUrl;
+
+				}
+
+			}
+
 	function onTimeUpdate() {
 		currentTime = videoElement.currentTime;
 		if (videoElement.buffered.length > 0) {
@@ -132,9 +194,11 @@
 		if (!ignoreNextEvent && !$isWaitingForOthers && !localIsBuffering)
 			emitAction("pause", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
-	function onSeeked() {
-		if (!ignoreNextEvent) emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
-	}
+		function onSeeked() { 
+			if (!ignoreNextEvent && !isDraggingSeek) {
+				emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime }); 
+			}
+		}
 	function onWaiting() {
 		localIsBuffering = true;
 		emitAction("buffering_start", $currentRoomId);
@@ -152,27 +216,151 @@
 		}
 	}
 
-	// --- Control Handlers ---
 	function togglePlay() {
 		isPlaying ? videoElement.pause() : videoElement.play();
 	}
-	function handleSeek(e: MouseEvent) {
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		const percent = (e.clientX - rect.left) / rect.width;
-		videoElement.currentTime = percent * duration;
-	}
+
+			function updateSeek(clientX: number) {
+
+				const bar = document.querySelector(".progress-bar-container");
+
+				if (!bar || !videoElement || !duration) return;
+
+				const rect = bar.getBoundingClientRect();
+
+				let percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+
+				const newTime = percent * duration;
+
+				
+
+				// Update local video and preview for immediate feedback
+
+				videoElement.currentTime = newTime;
+
+				seekHoverPercent = percent;
+
+				seekHoverTime = newTime;
+
+				
+
+				if (peekVideo && !isNaN(seekHoverTime)) {
+
+					peekVideo.currentTime = seekHoverTime;
+
+				}
+
+			}
+
+	
+
+		function handleMouseDownSeek(e: MouseEvent) {
+
+			if (e.button !== 0) return;
+
+			isDraggingSeek = true;
+
+			isHoveringSeek = true;
+
+			if (!peekHls) initPeekHls();
+
+			updateSeek(e.clientX);
+
+			window.addEventListener("mousemove", handleMouseMoveSeek);
+
+			window.addEventListener("mouseup", handleMouseUpSeek);
+
+		}
+
+	
+
+		function handleMouseMoveSeek(e: MouseEvent) {
+
+			if (isDraggingSeek) updateSeek(e.clientX);
+
+		}
+
+	
+
+		function handleMouseUpSeek() {
+
+			if (isDraggingSeek) {
+
+				isDraggingSeek = false;
+
+				// Finally update the main video and sync
+
+				videoElement.currentTime = seekHoverTime;
+
+				emitAction("seek", { roomId: $currentRoomId, time: seekHoverTime });
+
+			}
+
+			window.removeEventListener("mousemove", handleMouseMoveSeek);
+
+			window.removeEventListener("mouseup", handleMouseUpSeek);
+
+		}
+
+	
+
+		function handleTouchStartSeek(e: TouchEvent) {
+
+			isDraggingSeek = true;
+
+			isHoveringSeek = true;
+
+			if (!peekHls) initPeekHls();
+
+			updateSeek(e.touches[0].clientX);
+
+		}
+
+	
+
+		function handleTouchMoveSeek(e: TouchEvent) {
+
+			if (isDraggingSeek) {
+
+				updateSeek(e.touches[0].clientX);
+
+				if (e.cancelable) e.preventDefault();
+
+			}
+
+		}
+
+	
+
+		function handleTouchEndSeek() {
+
+			if (isDraggingSeek) {
+
+				isDraggingSeek = false;
+
+				isHoveringSeek = false;
+
+				videoElement.currentTime = seekHoverTime;
+
+				emitAction("seek", { roomId: $currentRoomId, time: seekHoverTime });
+
+			}
+
+		}
+
 	function handleSeekHover(e: MouseEvent) {
+		if (isDraggingSeek) return;
+		if (!peekHls) initPeekHls();
 		isHoveringSeek = true;
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		seekHoverPercent = (e.clientX - rect.left) / rect.width;
 		seekHoverTime = seekHoverPercent * duration;
+
+		if (peekVideo && !isNaN(seekHoverTime)) {
+			if (Math.abs(peekVideo.currentTime - seekHoverTime) > 0.2) peekVideo.currentTime = seekHoverTime;
+		}
 	}
-	function formatTime(s: number) {
-		if (isNaN(s)) return "00:00";
-		const m = Math.floor(s / 60);
-		const sec = Math.floor(s % 60);
-		return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
-	}
+
 	function handleVolume(e: Event) {
 		const val = parseFloat((e.target as HTMLInputElement).value);
 		volume = val;
@@ -192,14 +380,12 @@
 	}
 	async function togglePip() {
 		try {
-			if (document.pictureInPictureElement) {
-				await document.exitPictureInPicture();
-			} else if (videoElement) {
-				if (typeof videoElement.requestPictureInPicture === "function") {
+			if (document.pictureInPictureElement) await document.exitPictureInPicture();
+			else if (videoElement) {
+				if (typeof videoElement.requestPictureInPicture === "function")
 					await videoElement.requestPictureInPicture();
-				} else if ((videoElement as any).webkitSetPresentationMode) {
+				else if ((videoElement as any).webkitSetPresentationMode)
 					(videoElement as any).webkitSetPresentationMode("picture-in-picture");
-				}
 			}
 		} catch (err) {
 			console.error("PiP failed:", err);
@@ -214,136 +400,145 @@
 	function showControlsTemp() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
-		if (isPlaying && !isHoveringSeek) {
+		if (isPlaying && !isHoveringSeek)
 			controlsTimeout = setTimeout(() => {
 				showControls = false;
 			}, 3000);
-		}
 	}
 
-	function handleVideoClick() {
-		if (window.innerWidth < 768) {
-			showControls = !showControls;
-			if (showControls) showControlsTemp();
-		} else {
-			togglePlay();
-		}
-	}
-</script>
+		function handleVideoClick() {
 
-<div class="player-container" on:mousemove={showControlsTemp} on:mouseleave={() => (showControls = false)}>
-	<!-- svelte-ignore a11y-media-has-caption -->
-	<video
-		bind:this={videoElement}
-		playsinline
-		on:timeupdate={onTimeUpdate}
-		on:durationchange={onDurationChange}
-		on:play={onPlay}
-		on:pause={onPause}
-		on:seeked={onSeeked}
-		on:waiting={onWaiting}
-		on:playing={onPlaying}
-		on:canplay={onCanPlay}
-		on:click={handleVideoClick}
-	></video>
+			if (window.innerWidth < 768) { showControls = !showControls; if (showControls) showControlsTemp(); }
+
+			else togglePlay();
+
+		}
+
+	
+
+		function handleKeydown(e: KeyboardEvent) {
+
+			// Don't trigger if user is typing in an input or textarea
+
+			const target = e.target as HTMLElement;
+
+			if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+
+	
+
+			switch (e.key.toLowerCase()) {
+
+				case " ":
+
+					e.preventDefault(); // Prevent page scroll
+
+					togglePlay();
+
+					showControlsTemp();
+
+					break;
+
+				case "k": // YouTube style play/pause
+
+					togglePlay();
+
+					showControlsTemp();
+
+					break;
+
+				case "arrowleft":
+
+					skipTime(-5);
+
+					showControlsTemp();
+
+					break;
+
+				case "arrowright":
+
+					skipTime(5);
+
+					showControlsTemp();
+
+					break;
+
+				case "f":
+
+					toggleFullscreen();
+
+					break;
+
+				case "m":
+
+					toggleMute();
+
+					break;
+
+			}
+
+		}
+
+	</script>
+
+	
+
+	<svelte:window on:keydown={handleKeydown} />
+
+	
+
+	<div class="player-container" on:mousemove={showControlsTemp} on:mouseleave={() => (showControls = false)}>
+
+		<!-- svelte-ignore a11y-media-has-caption -->
+
+		<video bind:this={videoElement} playsinline on:timeupdate={onTimeUpdate} on:durationchange={onDurationChange} on:play={onPlay} on:pause={onPause} on:seeked={onSeeked} on:waiting={onWaiting} on:playing={onPlaying} on:canplay={onCanPlay} on:click={handleVideoClick}></video>
 
 	{#if $isWaitingForOthers || localIsBuffering}
 		<div class="loading-overlay">
 			<div class="spinner"></div>
-			<p>{localIsBuffering ? "Buffering..." : "Waiting for others..."}</p>
+			<p>{localIsBuffering ? "Loading..." : "Waiting for others..."}</p>
 		</div>
 	{/if}
 
 	<div class="controls-overlay {showControls || !isPlaying ? 'visible' : ''}">
-		<!-- Progress -->
-		<!-- svelte-ignore a11y-click-events-have-key-events -->
+		<div class="peek-video-container" style="display: none;">
+			<!-- svelte-ignore a11y-media-has-caption -->
+			<video bind:this={peekVideo} muted playsinline preload="auto"></video>
+		</div>
+
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div
 			class="progress-bar-container"
 			on:mousemove={handleSeekHover}
-			on:mouseleave={() => (isHoveringSeek = false)}
-			on:click={handleSeek}
+			on:mouseleave={() => {
+				if (!isDraggingSeek) isHoveringSeek = false;
+			}}
+			on:mousedown={handleMouseDownSeek}
+			on:touchstart={handleTouchStartSeek}
+			on:touchmove={handleTouchMoveSeek}
+			on:touchend={handleTouchEndSeek}
 		>
 			<div class="progress-bg"></div>
 			<div class="progress-buffered" style="width: {buffered}%"></div>
 			<div class="progress-current" style="width: {duration ? (currentTime / duration) * 100 : 0}%"></div>
 			{#if isHoveringSeek}
-				<div class="seek-tooltip" style="left: {seekHoverPercent * 100}%">{formatTime(seekHoverTime)}</div>
+				<SeekTooltip {seekHoverPercent} {seekHoverTime} {peekVideo} />
 				<div class="seek-ghost" style="width: {seekHoverPercent * 100}%"></div>
 			{/if}
 		</div>
 
-		<div class="controls-row">
-			<div class="left-controls">
-				<button class="icon-btn" on:click={togglePlay} title={isPlaying ? "Pause" : "Play"}>
-					{#if isPlaying}<svg viewBox="0 0 24 24"
-							><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg
-						>
-					{:else}<svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z" /></svg>{/if}
-				</button>
-
-				<button class="icon-btn" on:click={() => skipTime(-5)} title="Rewind 5s">
-					<svg viewBox="0 0 24 24">
-						<path
-							fill="currentColor"
-							d="M12.5,3C17.15,3 21.08,6.03 22.47,10.22L20.1,11C19.05,7.81 16.04,5.5 12.5,5.5C10.54,5.5 8.77,6.22 7.38,7.38L10,10H3V3L5.6,5.6C7.45,4 9.85,3 12.5,3Z"
-						/>
-						<text x="12.5" y="16" font-size="8" fill="white" font-weight="bold" text-anchor="middle"
-							>5</text
-						>
-					</svg>
-				</button>
-
-				<button class="icon-btn" on:click={() => skipTime(5)} title="Forward 5s">
-					<svg viewBox="0 0 24 24">
-						<path
-							fill="currentColor"
-							d="M11.5,3C6.85,3 2.92,6.03 1.53,10.22L3.9,11C4.95,7.81 7.96,5.5 11.5,5.5C13.46,5.5 15.23,6.22 16.62,7.38L14,10H21V3L18.4,5.6C16.55,4 14.15,3 11.5,3Z"
-						/>
-						<text x="11.5" y="16" font-size="8" fill="white" font-weight="bold" text-anchor="middle"
-							>5</text
-						>
-					</svg>
-				</button>
-
-				<div class="volume-control">
-					<button class="icon-btn" on:click={toggleMute}>
-						{#if isMuted || volume === 0}<svg viewBox="0 0 24 24"
-								><path
-									fill="currentColor"
-									d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"
-								/></svg
-							>
-						{:else}<svg viewBox="0 0 24 24"
-								><path
-									fill="currentColor"
-									d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
-								/></svg
-							>{/if}
-					</button>
-					<input type="range" min="0" max="1" step="0.1" value={volume} on:input={handleVolume} />
-				</div>
-				<span class="time-display">{formatTime(currentTime)} <span class="duration-total">/ {formatTime(duration)}</span></span>
-			</div>
-			<div class="right-controls">
-				<button class="icon-btn pip-btn" on:click={togglePip} title="Picture-in-Picture">
-					<svg viewBox="0 0 24 24"
-						><path
-							fill="currentColor"
-							d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"
-						/></svg
-					>
-				</button>
-				<button class="icon-btn" on:click={toggleFullscreen} title="Fullscreen">
-					<svg viewBox="0 0 24 24"
-						><path
-							fill="currentColor"
-							d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
-						/></svg
-					>
-				</button>
-			</div>
-		</div>
+		<Controls
+			{isPlaying}
+			{currentTime}
+			{duration}
+			{volume}
+			{isMuted}
+			{togglePlay}
+			{skipTime}
+			{toggleMute}
+			{handleVolume}
+			{togglePip}
+			{toggleFullscreen}
+		/>
 	</div>
 </div>
 
@@ -357,11 +552,9 @@
 		border-radius: 12px;
 		overflow: hidden;
 		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-		
 		@media (max-width: 768px) {
 			border-radius: 0;
 		}
-
 		video {
 			width: 100%;
 			height: 100%;
@@ -438,7 +631,6 @@
 					left: 0;
 					background: $primary;
 					border-radius: 5px;
-					position: relative;
 					height: 100%;
 					&::after {
 						content: "";
@@ -456,16 +648,6 @@
 				&:hover .progress-current::after {
 					opacity: 1;
 				}
-				.seek-tooltip {
-					position: absolute;
-					bottom: 15px;
-					transform: translateX(-50%);
-					background: #000;
-					padding: 4px 8px;
-					border-radius: 4px;
-					font-size: 0.8rem;
-					color: white;
-				}
 				.seek-ghost {
 					position: absolute;
 					top: 0;
@@ -473,98 +655,6 @@
 					left: 0;
 					background: rgba(255, 255, 255, 0.1);
 					pointer-events: none;
-				}
-			}
-			.controls-row {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				flex-wrap: nowrap; /* Keep items in one line */
-				gap: 5px;
-
-				.left-controls,
-				.right-controls {
-					display: flex;
-					align-items: center;
-					gap: 12px;
-
-					@media (max-width: 600px) {
-						gap: 6px;
-					}
-				}
-
-				.right-controls {
-					flex-shrink: 0; /* Never hide the right side */
-					
-					.pip-btn {
-						@media (max-width: 400px) {
-							display: none; /* Hide PiP to save space for Fullscreen */
-						}
-					}
-				}
-
-				.icon-btn {
-					background: none;
-					border: none;
-					color: white;
-					cursor: pointer;
-					padding: 0;
-					width: 28px;
-					height: 28px;
-					opacity: 0.8;
-					transition: 0.2s;
-					flex-shrink: 0;
-
-					@media (max-width: 480px) {
-						width: 24px;
-						height: 24px;
-					}
-
-					&:hover {
-						opacity: 1;
-						transform: scale(1.1);
-					}
-
-					svg {
-						width: 100%;
-						height: 100%;
-					}
-				}
-
-				.volume-control {
-					display: flex;
-					align-items: center;
-					gap: 5px;
-
-					input[type="range"] {
-						width: 60px;
-						accent-color: white;
-						cursor: pointer;
-
-						@media (max-width: 500px) {
-							width: 40px;
-						}
-
-						@media (max-width: 380px) {
-							display: none;
-						}
-					}
-				}
-
-				.time-display {
-					font-size: 0.85rem;
-					font-variant-numeric: tabular-nums;
-					white-space: nowrap;
-					opacity: 0.9;
-					color: white;
-
-					@media (max-width: 480px) {
-						font-size: 0.7rem;
-					}
-
-					@media (max-width: 350px) {
-						.duration-total { display: none; }
-					}
 				}
 			}
 		}

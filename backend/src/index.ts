@@ -9,7 +9,7 @@ import { registerPlayerHandlers } from "./handlers/playerHandler";
 const app = express();
 app.use(cors());
 
-// Use Routes
+// Use Routes (Manifest-only proxy)
 app.use("/", proxyRoutes);
 
 const httpServer = createServer(app);

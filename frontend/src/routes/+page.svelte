@@ -20,7 +20,7 @@
 
 	function goHome() {
 		isJoined.set(false);
-		window.history.pushState({}, '', '/');
+		window.history.pushState({}, "", "/");
 	}
 
 	function toggleSidebar() {
@@ -64,7 +64,10 @@
 				</div>
 				<button class="close-sidebar-btn" on:click={toggleSidebar} aria-label="Close Menu">
 					<svg viewBox="0 0 24 24" width="20" height="20">
-						<path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+						<path
+							fill="currentColor"
+							d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+						/>
 					</svg>
 				</button>
 			</div>
@@ -129,7 +132,9 @@
 				align-items: center;
 				gap: 0.5rem;
 				font-weight: bold;
-				img { height: 20px; }
+				img {
+					height: 20px;
+				}
 			}
 		}
 	}
@@ -196,7 +201,7 @@
 		align-items: center;
 		background: #1e222a;
 		border-bottom: 1px solid #2f3136;
-		
+
 		.sidebar-header {
 			flex: 1;
 			display: flex;
@@ -232,7 +237,9 @@
 				color: #b9bbbe;
 				padding: 1rem;
 				cursor: pointer;
-				&:hover { color: white; }
+				&:hover {
+					color: white;
+				}
 			}
 		}
 	}
