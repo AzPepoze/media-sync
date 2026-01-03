@@ -1,5 +1,9 @@
 # Media Sync
 
+<p align="center">
+  <img src="assets/logo.png" alt="Media Sync Logo" width="200" />
+</p>
+
 A real-time video watch party application that lets you watch HLS streams together with friends in perfect sync.
 
 ## What it is?
@@ -14,8 +18,6 @@ This app allows multiple users to watch a video at the exact same time. It synch
 
 You need to start both the server and the client:
 
-
-
 **Backend:** (Runs on port 3001)
 
 ```bash
@@ -27,8 +29,6 @@ pnpm install
 pnpm dev
 
 ```
-
-
 
 **Frontend:** (Runs on port 5173 for dev, 3000 for Docker/Production)
 
@@ -42,15 +42,13 @@ pnpm dev
 
 ```
 
-
-
 ### 2. Join a Room
 
-- Open the app in your browser (usually `http://localhost:5173` for dev or `http://localhost:3000` for Docker).
+-    Open the app in your browser (usually `http://localhost:5173` for dev or `http://localhost:3000` for Docker).
 
-- Enter your **Nickname** and a **Room ID**.
+-    Enter your **Nickname** and a **Room ID**.
 
-- Click **Join Room**.
+-    Click **Join Room**.
 
 ### 3. Load a Video
 

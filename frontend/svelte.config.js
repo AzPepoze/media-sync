@@ -10,6 +10,9 @@ const config = {
 	kit: {
 		// adapter-node creates a standalone Node server
 		adapter: adapter(),
+		files: {
+			assets: "public",
+		},
 	},
 };
 
