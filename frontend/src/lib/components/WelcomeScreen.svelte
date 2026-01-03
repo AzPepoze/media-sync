@@ -171,7 +171,8 @@
 
 	.login-container {
 		display: flex;
-		height: 100vh;
+		height: 100vh; /* Fallback */
+		height: 100dvh;
 		width: 100vw;
 		background-color: $bg-dark;
 		overflow: hidden;
@@ -211,7 +212,10 @@
 		align-items: center;
 		position: relative;
 		z-index: 1;
-		// Removed local background tint, relying on global overlay + text shadows
+
+		@media (max-width: 768px) {
+			display: none;
+		}
 
 		.brand-content {
 			text-align: center;

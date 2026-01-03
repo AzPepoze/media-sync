@@ -214,9 +214,20 @@
 	function showControlsTemp() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
-		controlsTimeout = setTimeout(() => {
-			if (isPlaying && !isHoveringSeek) showControls = false;
-		}, 3000);
+		if (isPlaying && !isHoveringSeek) {
+			controlsTimeout = setTimeout(() => {
+				showControls = false;
+			}, 3000);
+		}
+	}
+
+	function handleVideoClick() {
+		if (window.innerWidth < 768) {
+			showControls = !showControls;
+			if (showControls) showControlsTemp();
+		} else {
+			togglePlay();
+		}
 	}
 </script>
 
@@ -233,7 +244,7 @@
 		on:waiting={onWaiting}
 		on:playing={onPlaying}
 		on:canplay={onCanPlay}
-		on:click={togglePlay}
+		on:click={handleVideoClick}
 	></video>
 
 	{#if $isWaitingForOthers || localIsBuffering}
@@ -312,10 +323,10 @@
 					</button>
 					<input type="range" min="0" max="1" step="0.1" value={volume} on:input={handleVolume} />
 				</div>
-				<span class="time-display">{formatTime(currentTime)} / {formatTime(duration)}</span>
+				<span class="time-display">{formatTime(currentTime)} <span class="duration-total">/ {formatTime(duration)}</span></span>
 			</div>
 			<div class="right-controls">
-				<button class="icon-btn" on:click={togglePip} title="Picture-in-Picture">
+				<button class="icon-btn pip-btn" on:click={togglePip} title="Picture-in-Picture">
 					<svg viewBox="0 0 24 24"
 						><path
 							fill="currentColor"
@@ -346,6 +357,11 @@
 		border-radius: 12px;
 		overflow: hidden;
 		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+		
+		@media (max-width: 768px) {
+			border-radius: 0;
+		}
+
 		video {
 			width: 100%;
 			height: 100%;
@@ -463,46 +479,92 @@
 				display: flex;
 				justify-content: space-between;
 				align-items: center;
+				flex-wrap: nowrap; /* Keep items in one line */
+				gap: 5px;
+
 				.left-controls,
 				.right-controls {
 					display: flex;
 					align-items: center;
-					gap: 15px;
+					gap: 12px;
+
+					@media (max-width: 600px) {
+						gap: 6px;
+					}
 				}
+
+				.right-controls {
+					flex-shrink: 0; /* Never hide the right side */
+					
+					.pip-btn {
+						@media (max-width: 400px) {
+							display: none; /* Hide PiP to save space for Fullscreen */
+						}
+					}
+				}
+
 				.icon-btn {
 					background: none;
 					border: none;
 					color: white;
 					cursor: pointer;
 					padding: 0;
-					width: 32px;
-					height: 32px;
+					width: 28px;
+					height: 28px;
 					opacity: 0.8;
 					transition: 0.2s;
+					flex-shrink: 0;
+
+					@media (max-width: 480px) {
+						width: 24px;
+						height: 24px;
+					}
+
 					&:hover {
 						opacity: 1;
 						transform: scale(1.1);
 					}
+
 					svg {
 						width: 100%;
 						height: 100%;
 					}
 				}
+
 				.volume-control {
 					display: flex;
 					align-items: center;
 					gap: 5px;
+
 					input[type="range"] {
-						width: 80px;
+						width: 60px;
 						accent-color: white;
 						cursor: pointer;
+
+						@media (max-width: 500px) {
+							width: 40px;
+						}
+
+						@media (max-width: 380px) {
+							display: none;
+						}
 					}
 				}
+
 				.time-display {
-					font-size: 0.9rem;
+					font-size: 0.85rem;
 					font-variant-numeric: tabular-nums;
+					white-space: nowrap;
 					opacity: 0.9;
 					color: white;
+
+					@media (max-width: 480px) {
+						font-size: 0.7rem;
+					}
+
+					@media (max-width: 350px) {
+						.duration-total { display: none; }
+					}
 				}
 			}
 		}

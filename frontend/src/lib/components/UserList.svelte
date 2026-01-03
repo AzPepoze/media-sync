@@ -46,7 +46,6 @@
 
 	.sidebar {
 		background: $bg-panel;
-		border-left: 1px solid #2f3136;
 		padding: 1rem;
 		height: 100%;
 		overflow-y: auto;
