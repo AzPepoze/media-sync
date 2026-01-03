@@ -47,16 +47,22 @@ const rewriteManifestContent = (
 		const trimmedLine = line.trim();
 		if (!trimmedLine) return line;
 
-		// 1. Handle URLs inside tags like URI="...", etc.
+		// Handle Tags (starting with #)
 		if (trimmedLine.startsWith("#")) {
-			return trimmedLine.replace(/(URI=["']?)([^"'\s>]+)(["']?)/gi, (match, prefix, originalUri, suffix) => {
-				const absoluteUri = resolveAbsoluteUrl(originalUri, manifestBaseUrl);
-				const proxiedUri = createProxiedUrl(absoluteUri, serverBaseUrl, referer);
-				return `${prefix}${proxiedUri}${suffix}`;
-			});
+			if (trimmedLine.includes("URI=")) {
+				return trimmedLine.replace(
+					/(URI=["']?)([^"'\s>]+)(["']?)/gi,
+					(match, prefix, originalUri, suffix) => {
+						const absoluteUri = resolveAbsoluteUrl(originalUri, manifestBaseUrl);
+						const proxiedUri = createProxiedUrl(absoluteUri, serverBaseUrl, referer);
+						return `${prefix}${proxiedUri}${suffix}`;
+					}
+				);
+			}
+			return line;
 		}
 
-		// 2. Handle plain URL lines
+		// Handle Segment URLs
 		const absoluteSegmentUrl = resolveAbsoluteUrl(trimmedLine, manifestBaseUrl);
 		return createProxiedUrl(absoluteSegmentUrl, serverBaseUrl, referer);
 	});
@@ -88,7 +94,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
 			"User-Agent": DEFAULT_USER_AGENT,
 		};
 
-		// Support Range Requests for MP4 seeking/instant playback
+		// [Crucial for MP4] Forward Range header (requested bytes)
 		if (req.headers.range) {
 			requestHeaders["Range"] = req.headers.range;
 		}
@@ -104,55 +110,87 @@ router.get("/proxy", async (req: Request, res: Response) => {
 			url: targetUrl,
 			method: "GET",
 			headers: requestHeaders,
-			responseType: "stream", // Use stream to handle large files and instant playback
+			responseType: "stream", // Always use stream to handle large files
 			timeout: 60000,
 			maxRedirects: 5,
-			validateStatus: () => true, // Pass through all status codes (200, 206, 302, etc.)
+			validateStatus: () => true, // Accept all status codes (including 206 Partial Content)
 		};
 
 		const response = await axios(axiosConfig);
 		const finalResourceUrl = (response.request as any).res?.responseUrl || targetUrl;
 		const contentType = response.headers["content-type"] || "";
 
-		// Logic to detect if it's a manifest that needs rewriting
+		// Check if it looks like a manifest based on URL or Content-Type
 		const isManifest =
 			targetUrl.toLowerCase().includes(".m3u8") ||
-			targetUrl.toLowerCase().includes(".txt") ||
 			contentType.includes("mpegurl") ||
 			contentType.includes("apple.mpegurl");
 
-		// Essential CORS and Range headers
+		// Set basic CORS headers
 		res.setHeader("Access-Control-Allow-Origin", "*");
-		res.setHeader("Accept-Ranges", "bytes");
-		if (contentType) res.setHeader("Content-Type", contentType);
-		if (response.headers["content-range"]) res.setHeader("Content-Range", response.headers["content-range"]);
-		if (response.headers["content-length"]) res.setHeader("Content-Length", response.headers["content-length"]);
+		res.setHeader("Access-Control-Allow-Headers", "Range");
+		res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range");
 
 		if (isManifest) {
-			// Buffer manifest text to rewrite it
-			let chunks: any[] = [];
+			// --- MANIFEST LOGIC (Buffer -> Rewrite -> Send) ---
+
+			// Collect stream into buffer
+			const chunks: any[] = [];
 			response.data.on("data", (chunk: any) => chunks.push(chunk));
+
 			response.data.on("end", () => {
-				const manifestText = Buffer.concat(chunks).toString("utf-8");
-				const rewrittenManifest = rewriteManifestContent(
-					manifestText,
-					finalResourceUrl,
-					serverBaseUrl,
-					referer
-				);
-				res.send(rewrittenManifest);
+				const buffer = Buffer.concat(chunks);
+				const manifestText = buffer.toString("utf-8");
+
+				// Double check content signature just to be safe
+				if (manifestText.startsWith("#EXTM3U")) {
+					const rewrittenManifest = rewriteManifestContent(
+						manifestText,
+						finalResourceUrl,
+						serverBaseUrl,
+						referer
+					);
+					res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+					res.send(rewrittenManifest);
+				} else {
+					// Not a real manifest? Send raw buffer
+					if (contentType) res.setHeader("Content-Type", contentType);
+					res.send(buffer);
+				}
+			});
+
+			response.data.on("error", () => {
+				if (!res.headersSent) res.status(500).send("Error reading manifest stream");
 			});
 		} else {
-			// Stream binary data directly for performance and range support
+			// --- MP4/BINARY LOGIC (Pipe Stream Directly) ---
+
+			// Forward critical headers for streaming
+			if (contentType) res.setHeader("Content-Type", contentType);
+			if (response.headers["content-length"])
+				res.setHeader("Content-Length", response.headers["content-length"]);
+			if (response.headers["accept-ranges"]) res.setHeader("Accept-Ranges", response.headers["accept-ranges"]);
+			if (response.headers["content-range"]) res.setHeader("Content-Range", response.headers["content-range"]);
+
+			// Forward the status code (200 OK or 206 Partial Content)
 			res.status(response.status);
+
+			// Pipe data directly to client (efficient for large files)
 			response.data.pipe(res);
 
+			// Cleanup
+			response.data.on("error", (err: any) => {
+				// console.error("Stream error", err);
+				if (!res.headersSent) res.end();
+			});
+
 			req.on("close", () => {
-				if (response.data) response.data.destroy();
+				if (response.data && typeof response.data.destroy === "function") {
+					response.data.destroy();
+				}
 			});
 		}
 	} catch (error: any) {
-		console.error(`[Proxy Error] ${targetUrl.substring(0, 50)}:`, error.message);
 		if (!res.headersSent) {
 			res.status(500).send("Error fetching resource");
 		}

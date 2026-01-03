@@ -19,10 +19,10 @@
 	let volume = 1;
 	let isMuted = false;
 	let showControls = true;
-	let controlsTimeout: any;
 	let seekHoverTime = 0;
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
+	let controlsTimeout: ReturnType<typeof setTimeout>;
 
 	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
@@ -72,6 +72,20 @@
 		});
 	}
 
+	//-------------------------------------------------------
+	// Helper Functions
+	//-------------------------------------------------------
+	function getProxyUrl(url: string, referer: string = ""): string {
+		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
+		if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
+		return videoUrl;
+	}
+
+	function isHlsSource(url: string): boolean {
+		const lowerUrl = url.toLowerCase();
+		return lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt");
+	}
+
 	function loadVideo(url: string, referer: string) {
 		localIsBuffering = true;
 		currentTime = 0;
@@ -80,16 +94,22 @@
 		if (videoElement) {
 			videoElement.pause();
 			videoElement.currentTime = 0;
+			// Reset src to ensure clean state before loading new content
+			videoElement.removeAttribute("src");
+			videoElement.load();
 		}
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
 
-		// USE PROXY FOR EVERYTHING to ensure CORS compliance
-		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
-		if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
+		const videoUrl = getProxyUrl(url, referer);
 
-		if (Hls.isSupported() && (url.toLowerCase().includes(".m3u8") || url.toLowerCase().includes(".txt"))) {
-			if (hls) hls.destroy();
+		// Clean up existing HLS instance
+		if (hls) {
+			hls.destroy();
+			hls = null;
+		}
+
+		if (Hls.isSupported() && isHlsSource(url)) {
 			hls = new Hls({ capLevelToPlayerSize: true });
 			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
@@ -102,28 +122,37 @@
 					else hls?.destroy();
 				}
 			});
-			if (peekHls) { peekHls.destroy(); peekHls = null; }
+			// Clean up peek HLS if main video changes
+			if (peekHls) {
+				peekHls.destroy();
+				peekHls = null;
+			}
 		} else {
-			// For direct video files like .mp4, .webm, etc.
-			if (hls) { hls.destroy(); hls = null; }
+			// For direct video files like .mp4, .webm, etc. use Proxy URL
 			videoElement.src = videoUrl;
+			videoElement.load();
 		}
 	}
 
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
-		
-		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(currentLoadedUrl)}`;
-		if (currentLoadedReferer) videoUrl += `&referer=${encodeURIComponent(currentLoadedReferer)}`;
 
-		// Only use HLS for Peek if it's an HLS source
-		if (Hls.isSupported() && (currentLoadedUrl.toLowerCase().includes(".m3u8") || currentLoadedUrl.toLowerCase().includes(".txt"))) {
+		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
+
+		// Prevent reloading MP4 peek if already set
+		if (!isHlsSource(currentLoadedUrl) && peekVideo && peekVideo.getAttribute("src") === videoUrl) return;
+
+		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
 			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, maxMaxBufferLength: 2, startLevel: 0 });
-			peekHls.on(Hls.Events.MANIFEST_PARSED, () => { if (peekHls) peekHls.currentLevel = 0; });
+			peekHls.on(Hls.Events.MANIFEST_PARSED, () => {
+				if (peekHls) peekHls.currentLevel = 0;
+			});
 			peekHls.loadSource(videoUrl);
 			peekHls.attachMedia(peekVideo);
 		} else if (peekVideo) {
+			// Handle MP4 peek via proxy as well
 			peekVideo.src = videoUrl;
+			peekVideo.load();
 		}
 	}
 
@@ -230,10 +259,11 @@
 	function showControlsTemp() {
 		showControls = true;
 		clearTimeout(controlsTimeout);
-		if (isPlaying && !isHoveringSeek)
+		if (isPlaying && !isHoveringSeek) {
 			controlsTimeout = setTimeout(() => {
 				showControls = false;
 			}, 3000);
+		}
 	}
 
 	function handleVideoClick() {
