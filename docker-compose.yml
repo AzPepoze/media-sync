@@ -8,6 +8,7 @@ services:
              - "3001:3001"
           environment:
              - PORT=3001
+             - FRONTEND_URL=${FRONTEND_URL}
           networks:
              - sync-network
           restart: always

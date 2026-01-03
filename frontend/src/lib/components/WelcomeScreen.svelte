@@ -28,7 +28,7 @@
 		isBgLoading = true;
 		try {
 			const targetUrl = `https://konachan.net/post.json?limit=1&tags=order:random+rating:safe`;
-			const proxyUrl = `https://proxy.azpepoze.workers.dev/?url=${encodeURIComponent(targetUrl)}`;
+			const proxyUrl = `https://proxy.azpepoze.com/?url=${encodeURIComponent(targetUrl)}`;
 			const res = await fetch(proxyUrl);
 			const data = await res.json();
 
