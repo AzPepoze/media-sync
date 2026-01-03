@@ -44,13 +44,14 @@
 
 	let currentLoadedReferer = "";
 	$: if ($roomState.videoUrl) {
-		if ($roomState.videoUrl !== currentLoadedUrl || $roomState.referer !== currentLoadedReferer) {
+		const stateReferer = $roomState.referer || "";
+		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
 			let startTime = $roomState.currentTime;
 			if ($roomState.isPlaying && $roomState.lastUpdated) {
 				const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
 				startTime += elapsed;
 			}
-			loadVideo($roomState.videoUrl, $roomState.referer || "", startTime, $roomState.isPlaying);
+			loadVideo($roomState.videoUrl, stateReferer, startTime, $roomState.isPlaying);
 		}
 	}
 

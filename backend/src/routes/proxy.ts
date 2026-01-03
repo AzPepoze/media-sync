@@ -81,16 +81,6 @@ const rewriteManifestContent = (
 };
 
 // Route Handlers
-
-router.get("/hls-manifest", (req: Request, res: Response) => {
-	const { url, referer } = req.query as unknown as ProxyRequestQuery;
-	if (!url) return res.status(400).send("Missing 'url' parameter");
-
-	const serverBaseUrl = getServerBaseUrl(req);
-	const targetUrl = createProxiedUrl(url, serverBaseUrl, referer);
-	res.redirect(targetUrl);
-});
-
 router.get("/proxy", async (req: Request, res: Response) => {
 	const { url: targetUrl, referer } = req.query as unknown as ProxyRequestQuery;
 
