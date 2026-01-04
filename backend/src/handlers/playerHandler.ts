@@ -84,15 +84,14 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 
 		io.to(roomId).emit("room_buffering", anyBuffering);
 
-		if (!anyBuffering && rooms[roomId].isPlaying) {
-			// Resume playback ONLY if the room was playing
-			rooms[roomId].lastUpdated = Date.now();
-			console.log(`[Buffering] Room ${roomId} resumed at ${rooms[roomId].currentTime}`);
-			io.to(roomId).emit("player_action", { action: "play", time: rooms[roomId].currentTime });
-		} else if (!anyBuffering && !rooms[roomId].isPlaying) {
-			// If room was paused, just sync the time to everyone without playing
-			console.log(`[Buffering] Room ${roomId} synced while paused at ${rooms[roomId].currentTime}`);
-			io.to(roomId).emit("player_action", { action: "seek", time: rooms[roomId].currentTime });
+		if (!anyBuffering) {
+			if (rooms[roomId].isPlaying) {
+				rooms[roomId].lastUpdated = Date.now();
+				console.log(`[Buffering] Room ${roomId} resumed at ${rooms[roomId].currentTime}`);
+				io.to(roomId).emit("player_action", { action: "play", time: rooms[roomId].currentTime });
+			} else {
+				console.log(`[Buffering] Room ${roomId} ready (paused) at ${rooms[roomId].currentTime}`);
+			}
 		}
 	};
 	socket.on("buffering_start", (roomId: string) => {
