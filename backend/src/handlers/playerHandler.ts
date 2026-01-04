@@ -50,12 +50,11 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 
 	// Buffering Logic Helper
 	const updateBuffering = (roomId: string, socketId: string, isBuffering: boolean) => {
-		if (!roomUsers[roomId]) return;
+		if (!roomUsers[roomId] || !rooms[roomId]) return;
 
 		const user = roomUsers[roomId].find((u) => u.id === socketId);
 		if (user) {
 			user.isBuffering = isBuffering;
-			// Broadcast user update (so we can see who is buffering in the list)
 			io.to(roomId).emit("room_users", roomUsers[roomId]);
 		}
 
@@ -63,8 +62,19 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 		io.to(roomId).emit("room_buffering", anyBuffering);
 
 		if (!anyBuffering && rooms[roomId].isPlaying) {
-			// Resume if everyone ready
-			io.to(roomId).emit("player_action", { action: "play", time: rooms[roomId].currentTime });
+			// Calculate where the video should be right now
+			let syncTime = rooms[roomId].currentTime;
+			if (rooms[roomId].lastUpdated) {
+				const elapsed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
+				syncTime += elapsed;
+			}
+			
+			// Update server state to this new point
+			rooms[roomId].currentTime = syncTime;
+			rooms[roomId].lastUpdated = Date.now();
+
+			// Resume everyone at the precisely calculated time
+			io.to(roomId).emit("player_action", { action: "play", time: syncTime });
 		}
 	};
 

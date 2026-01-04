@@ -74,11 +74,11 @@
 		} else if (videoElement) {
 			const diff = Math.abs(videoElement.currentTime - targetTime);
 			if (diff > 2) {
+				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
 				isRemoteActionActive = true;
 				videoElement.currentTime = targetTime;
-				setTimeout(() => (isRemoteActionActive = false), 500);
+				setTimeout(() => (isRemoteActionActive = false), 2000);
 			}
-
 			if ($roomState.isPlaying && videoElement.paused && !$isWaitingForOthers && !localIsBuffering) {
 				videoElement.play().catch(() => {});
 			} else if (!$roomState.isPlaying && !videoElement.paused) {
@@ -95,13 +95,18 @@
 		$socket.off("room_buffering");
 
 		$socket.on("connect", () => {
+			console.log("[Player] Socket connected, re-syncing...");
 			currentLoadedUrl = "";
 			loadCurrentVideo();
 		});
 
 		$socket.on("player_action", (data: { action: string; time: number }) => {
 			if (!videoElement) return;
+			console.log("[Player] Action received:", data.action, "at", data.time);
+
+			// Handle Seek separately for robust loop prevention
 			if (data.action === "seek") {
+				console.log("[Player] Remote seek to", data.time);
 				isRemoteSeeking = true;
 				videoElement.currentTime = data.time;
 				localIsBuffering = true;
@@ -127,6 +132,8 @@
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!videoElement) return;
+			console.log("[Player] Room buffering updated:", isBuffering);
+
 			isRemoteActionActive = true;
 			if (isBuffering) {
 				if (!videoElement.paused) {
@@ -174,7 +181,7 @@
 
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
-		
+
 		const videoUrl = getProxyUrl(url, referer);
 
 		if (hls) {
@@ -263,15 +270,21 @@
 	}
 
 	function onSeeked() {
+		const wasBuffering = localIsBuffering;
+		// Clear local buffering state regardless of origin
 		if (localIsBuffering) {
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 		}
+
+		// If the seek was triggered by a remote event, just clear the flag
 		if (isRemoteSeeking) {
 			isRemoteSeeking = false;
 			return;
 		}
-		if (!isRemoteActionActive) {
+
+		// Emit seek only if it was a local user action and we weren't just syncing/buffering
+		if (!isRemoteActionActive && !wasBuffering) {
 			emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
 		}
 	}

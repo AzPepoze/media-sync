@@ -29,14 +29,14 @@ export function initSocket() {
 	socket.set(socketInstance);
 
 	socketInstance.on("connect", () => {
-		console.log("Connected:", socketInstance.id);
+		console.log("[Socket] Connected:", socketInstance.id);
 		isConnected.set(true);
 
 		// Auto re-join if we have the info
 		const savedRoomId = localStorage.getItem("roomId");
 		const savedNickname = localStorage.getItem("nickname");
 		if (savedRoomId && savedNickname) {
-			console.log("Auto-rejoining room:", savedRoomId);
+			console.log("[Socket] Auto-rejoining room:", savedRoomId);
 			socketInstance.emit("join_room", { roomId: savedRoomId, nickname: savedNickname });
 			isJoined.set(true);
 			currentRoomId.set(savedRoomId);
@@ -44,30 +44,33 @@ export function initSocket() {
 	});
 
 	socketInstance.on("disconnect", (reason) => {
-		console.log("Disconnected:", reason);
+		console.log("[Socket] Disconnected:", reason);
 		isConnected.set(false);
 	});
 
 	socketInstance.on("sync_state", (state: RoomState) => {
-		console.log("Sync state received:", state.videoUrl);
+		console.log("[Socket] Sync state received:", state);
 		roomState.set(state);
 		isVideoChanging.set(false);
 	});
 
 	socketInstance.on("video_changing", () => {
-		console.log("Video is changing...");
+		console.log("[Socket] Video is changing...");
 		isVideoChanging.set(true);
 	});
 
 	socketInstance.on("room_users", (list: User[]) => {
+		console.log("[Socket] Room users updated:", list);
 		users.set(list);
 	});
 
 	socketInstance.on("room_buffering", (isBuffering: boolean) => {
+		console.log("[Socket] Room buffering status:", isBuffering);
 		isWaitingForOthers.set(isBuffering);
 	});
 
 	socketInstance.on("player_action", (data: { action: string; time: number }) => {
+		console.log("[Socket] Player action received:", data);
 		roomState.update((s) => ({
 			...s,
 			isPlaying: data.action === "play",
