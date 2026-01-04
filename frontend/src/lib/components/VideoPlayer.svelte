@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { fade } from "svelte/transition";
 	import Hls from "hls.js";
-	import { socket, roomState, isWaitingForOthers, isVideoChanging, emitAction, currentRoomId } from "../stores/socket";
+	import {
+		socket,
+		roomState,
+		isWaitingForOthers,
+		isVideoChanging,
+		emitAction,
+		currentRoomId,
+	} from "../stores/socket";
 	import SeekTooltip from "./player/SeekTooltip.svelte";
 	import Controls from "./player/Controls.svelte";
 
@@ -45,17 +52,22 @@
 	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
 	let currentLoadedReferer = "";
-	$: if ($roomState.videoUrl) {
-		const stateReferer = $roomState.referer || "";
-		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
-			let startTime = $roomState.currentTime;
-			if ($roomState.isPlaying && $roomState.lastUpdated) {
-				const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
-				startTime += elapsed;
+
+	function loadCurrentVideo() {
+		if ($roomState.videoUrl) {
+			const stateReferer = $roomState.referer || "";
+			if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
+				let startTime = $roomState.currentTime;
+				if ($roomState.isPlaying && $roomState.lastUpdated) {
+					const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
+					startTime += elapsed;
+				}
+				loadVideo($roomState.videoUrl, stateReferer, startTime, $roomState.isPlaying);
 			}
-			loadVideo($roomState.videoUrl, stateReferer, startTime, $roomState.isPlaying);
 		}
 	}
+
+	$: $roomState.videoUrl && loadCurrentVideo();
 
 	$: if ($socket) {
 		$socket.on("player_action", (data: { action: string; time: number }) => {
@@ -122,7 +134,7 @@
 		buffered = 0;
 		isPlaying = shouldPlay;
 		retryCount = 0; // Reset retry count for new video
-		
+
 		// Prevent emitting events during initial load/seek
 		ignoreNextEvent = true;
 
@@ -145,13 +157,13 @@
 		if (Hls.isSupported() && isHlsSource(url)) {
 			hls = new Hls({
 				capLevelToPlayerSize: true,
-				manifestLoadingMaxRetry: 1, 
+				manifestLoadingMaxRetry: 1,
 				levelLoadingMaxRetry: 1,
-				fragLoadingMaxRetry: 2
+				fragLoadingMaxRetry: 2,
 			});
-			
+
 			hls.on(Hls.Events.MANIFEST_PARSED, () => {
-				retryCount = 0; 
+				retryCount = 0;
 				isVideoChanging.set(false); // Reset UI ONLY when manifest is ready
 				if (videoElement) {
 					videoElement.currentTime = startTime;
@@ -159,14 +171,16 @@
 						videoElement.play().catch(() => {});
 					}
 				}
-				setTimeout(() => { ignoreNextEvent = false; }, 2000);
+				setTimeout(() => {
+					ignoreNextEvent = false;
+				}, 2000);
 			});
 
 			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
 			hls.on(Hls.Events.ERROR, (e, data) => {
 				const status = data.response?.code;
-				
+
 				// Handle unrecoverable HTTP errors immediately, even if not marked as fatal yet
 				if (data.type === Hls.ErrorTypes.NETWORK_ERROR && status && (status === 403 || status === 404)) {
 					if (retryCount < MAX_RETRIES) {
@@ -210,14 +224,16 @@
 			videoElement.src = videoUrl;
 			videoElement.currentTime = startTime;
 			videoElement.oncanplay = () => {
-				retryCount = 0; 
+				retryCount = 0;
 				isVideoChanging.set(false); // Reset UI when video is ready
 			};
 			videoElement.load();
 			if (shouldPlay) {
 				videoElement.play().catch(() => {});
 			}
-			setTimeout(() => { ignoreNextEvent = false; }, 2000);
+			setTimeout(() => {
+				ignoreNextEvent = false;
+			}, 2000);
 		}
 	}
 
@@ -236,7 +252,7 @@
 				maxMaxBufferLength: 2,
 				startLevel: 0,
 				manifestLoadingMaxRetry: 0,
-				levelLoadingMaxRetry: 0
+				levelLoadingMaxRetry: 0,
 			});
 			peekHls.on(Hls.Events.MANIFEST_PARSED, () => {
 				if (peekHls) peekHls.currentLevel = 0;
@@ -299,17 +315,13 @@
 	}
 
 	function handleVideoError() {
-		if (hls) return; // Let HLS handler manage its own errors
-		
+		if (hls) return;
+
 		if (retryCount < MAX_RETRIES) {
 			retryCount++;
 			console.log(`Retrying video load (${retryCount}/${MAX_RETRIES})...`);
 			setTimeout(() => {
-				const currentSrc = videoElement.src;
-				videoElement.removeAttribute("src");
-				videoElement.load();
-				videoElement.src = currentSrc;
-				videoElement.load();
+				loadCurrentVideo();
 				if (isPlaying) videoElement.play().catch(() => {});
 			}, 500);
 			return;
@@ -419,7 +431,12 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="player-container" class:hide-cursor={hideCursor} on:mousemove={showControlsTemp} on:mouseleave={() => (showControls = false)}>
+<div
+	class="player-container"
+	class:hide-cursor={hideCursor}
+	on:mousemove={showControlsTemp}
+	on:mouseleave={() => (showControls = false)}
+>
 	<!-- svelte-ignore a11y-media-has-caption -->
 	<video
 		bind:this={videoElement}
@@ -439,7 +456,20 @@
 	{#if !$roomState.videoUrl}
 		<div class="no-video-overlay" transition:fade={{ duration: 200 }}>
 			<div class="no-video-icon">
-				<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 7v5l3 3"/></svg>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="64"
+					height="64"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" /><path
+						d="M12 7v5l3 3"
+					/></svg
+				>
 			</div>
 			<h3>No video selected</h3>
 			<p>Enter a URL in the bar below to start watching together</p>
@@ -463,7 +493,20 @@
 		<div class="error-overlay" transition:fade={{ duration: 200 }}>
 			<div class="error-card">
 				<div class="error-icon">
-					<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="48"
+						height="48"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><path
+							d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+						/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+					>
 				</div>
 				<h3>Playback Error</h3>
 				<p>{errorMessage}</p>

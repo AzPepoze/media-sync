@@ -3,10 +3,8 @@
 
 	let inputUrl = "";
 	let refererUrl = "";
-	let showCopied = false;
 	let isLoading = false;
 
-	// Track last synced values to prevent overwriting user input on unrelated store updates
 	let lastServerUrl: string | null = null;
 	let lastServerReferer: string | null = null;
 
@@ -30,13 +28,6 @@
 			// Security fallback: if backend fails to respond, reset loading after 15s
 			setTimeout(() => { isLoading = false; isVideoChanging.set(false); }, 15000);
 		}
-	}
-
-	function copyRoomId() {
-		const inviteLink = `${window.location.origin}${window.location.pathname}?room_id=${$currentRoomId}`;
-		navigator.clipboard.writeText(inviteLink);
-		showCopied = true;
-		setTimeout(() => (showCopied = false), 2000);
 	}
 </script>
 
