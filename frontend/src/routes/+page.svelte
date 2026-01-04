@@ -11,7 +11,13 @@
 	let showSidebar = false;
 
 	onMount(() => {
-		initSocket();
+		const savedRoomId = localStorage.getItem("roomId");
+		const savedNickname = localStorage.getItem("nickname");
+
+		// Only init socket if we were previously in a room (for auto-rejoin)
+		if (savedRoomId && savedNickname) {
+			initSocket();
+		}
 	});
 
 	onDestroy(() => {

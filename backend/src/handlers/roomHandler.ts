@@ -26,7 +26,11 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 			roomUsers[roomId] = [];
 		}
 
-		// Add User to List
+		// Add User to List (Remove duplicate nicknames first)
+		if (roomUsers[roomId]) {
+			roomUsers[roomId] = roomUsers[roomId].filter((u) => u.nickname !== nickname);
+		}
+
 		const newUser: User = {
 			id: socket.id,
 			nickname: nickname || `User ${socket.id.substring(0, 4)}`,
