@@ -65,8 +65,17 @@
 				<!-- svelte-ignore a11y-no-static-element-interactions -->
 				<div class="sidebar-header" on:click={goHome} title="Return to Welcome Page">
 					<img src="/logo.png" alt="Media Sync" class="mini-logo" />
-					<span class="brand-name">Media Sync</span>
+					<div class="header-text">
+						<span class="brand-name">Media Sync</span>
+						<span class="room-id-display">Room: {$currentRoomId}</span>
+					</div>
 				</div>
+				<button class="leave-room-btn" on:click={goHome} title="Leave Room">
+					<svg viewBox="0 0 24 24" width="18" height="18">
+						<path fill="currentColor" d="M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z" />
+					</svg>
+					<span>Leave</span>
+				</button>
 				<button class="close-sidebar-btn" on:click={toggleSidebar} aria-label="Close Menu">
 					<svg viewBox="0 0 24 24" width="20" height="20">
 						<path
@@ -211,7 +220,7 @@
 			flex: 1;
 			display: flex;
 			align-items: center;
-			gap: 0.5rem;
+			gap: 0.7rem;
 			padding: 1rem;
 			cursor: pointer;
 			transition: background 0.2s;
@@ -221,15 +230,54 @@
 			}
 
 			.mini-logo {
-				height: 24px;
+				height: 28px;
 				width: auto;
 			}
 
-			.brand-name {
-				font-weight: 800;
-				font-size: 1.1rem;
-				color: #fff;
-				letter-spacing: -0.5px;
+			.header-text {
+				display: flex;
+				flex-direction: column;
+				.brand-name {
+					font-weight: 800;
+					font-size: 1rem;
+					color: #fff;
+					letter-spacing: -0.5px;
+					line-height: 1.1;
+				}
+				.room-id-display {
+					font-size: 0.75rem;
+					color: #b9bbbe;
+					font-family: monospace;
+				}
+			}
+		}
+
+		.leave-room-btn {
+			display: flex;
+			align-items: center;
+			gap: 0.4rem;
+			background: rgba(237, 66, 69, 0.1);
+			color: #ed4245;
+			border: 1px solid rgba(237, 66, 69, 0.2);
+			padding: 0.4rem 0.8rem;
+			margin-right: 0.5rem;
+			border-radius: 4px;
+			cursor: pointer;
+			font-weight: 600;
+			font-size: 0.85rem;
+			transition: all 0.2s;
+
+			&:hover {
+				background: #ed4245;
+				color: white;
+				border-color: #ed4245;
+			}
+
+			@media (max-width: 768px) {
+				span {
+					display: none; /* Icon only on small mobile to save space */
+				}
+				padding: 0.5rem;
 			}
 		}
 
