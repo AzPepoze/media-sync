@@ -119,6 +119,12 @@
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
 			if (data.action === "seek") {
+				// Avoid re-seeking if we are already close (e.g. sender)
+				if (Math.abs(videoElement.currentTime - data.time) < 0.5) {
+					console.log("[Player] Ignoring seek, already at time.");
+					return;
+				}
+
 				console.log("[Player] Remote seek to", data.time);
 				isRemoteSeeking = true;
 				videoElement.currentTime = data.time;
