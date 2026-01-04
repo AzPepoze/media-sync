@@ -16,6 +16,7 @@ export const roomState = writable<RoomState>({
 	lastUpdated: 0,
 });
 export const isWaitingForOthers = writable(false);
+export const isVideoChanging = writable(false);
 
 // --- Actions ---
 const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
@@ -40,6 +41,11 @@ export function initSocket() {
 
 	socketInstance.on("sync_state", (state: RoomState) => {
 		roomState.set(state);
+		isVideoChanging.set(false); // Reset when new video state arrives
+	});
+
+	socketInstance.on("video_changing", () => {
+		isVideoChanging.set(true);
 	});
 
 	socketInstance.on("room_users", (list: User[]) => {

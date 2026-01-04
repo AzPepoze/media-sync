@@ -4,6 +4,7 @@
 	let inputUrl = "";
 	let refererUrl = "";
 	let showCopied = false;
+	let isLoading = false;
 
 	// Track last synced values to prevent overwriting user input on unrelated store updates
 	let lastServerUrl: string | null = null;
@@ -13,6 +14,7 @@
 		if ($roomState.videoUrl !== lastServerUrl) {
 			inputUrl = $roomState.videoUrl || "";
 			lastServerUrl = $roomState.videoUrl;
+			isLoading = false;
 		}
 		if ($roomState.referer !== lastServerReferer) {
 			refererUrl = $roomState.referer || "";
@@ -21,8 +23,10 @@
 	}
 
 	function handleLoad() {
-		if ($currentRoomId) {
+		if ($currentRoomId && inputUrl.trim()) {
+			isLoading = true;
 			setUrl($currentRoomId, inputUrl, refererUrl);
+			setTimeout(() => { isLoading = false; }, 15000);
 		}
 	}
 
@@ -38,7 +42,9 @@
 	<div class="input-row">
 		<input type="text" bind:value={inputUrl} placeholder="Video URL (mp4 / .m3u8 / .txt)" />
 		<input type="text" bind:value={refererUrl} placeholder="Referer URL (Optional)" />
-		<button class="load-btn" on:click={handleLoad}>Load</button>
+		<button class="load-btn" on:click={handleLoad} disabled={isLoading}>
+			{isLoading ? "Loading..." : "Load"}
+		</button>
 	</div>
 </div>
 

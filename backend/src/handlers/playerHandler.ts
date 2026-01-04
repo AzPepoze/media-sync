@@ -5,6 +5,9 @@ import { resolveVideoUrl } from "../utils/ytdlp";
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
 		if (rooms[roomId]) {
+			// Notify everyone immediately that the video is being resolved/changed
+			io.to(roomId).emit("video_changing");
+
 			const resolved = await resolveVideoUrl(url);
 			rooms[roomId].videoUrl = resolved.url;
 			rooms[roomId].referer = resolved.referer || referer || null;

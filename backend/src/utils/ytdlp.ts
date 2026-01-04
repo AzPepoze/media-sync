@@ -31,7 +31,7 @@ async function tryNormalStrategy(url: string): Promise<ResolvedMedia | null> {
         const { stdout } = await execAsync(`yt-dlp -g --no-check-certificates --no-warnings "${url}"`);
         const resolvedUrl = stdout.trim().split("\n")[0];
         if (resolvedUrl && resolvedUrl.startsWith("http")) {
-            return { url: resolvedUrl, referer: url };
+            return { url: resolvedUrl }; // No more forced referer here
         }
     } catch (e) {
         return null;
@@ -48,7 +48,7 @@ async function tryAdvancedStrategy(url: string): Promise<ResolvedMedia | null> {
         if (info && info.url) {
             return { 
                 url: info.url, 
-                referer: info.http_headers?.Referer || info.webpage_url || url 
+                referer: info.http_headers?.Referer || undefined 
             };
         }
         
@@ -56,7 +56,7 @@ async function tryAdvancedStrategy(url: string): Promise<ResolvedMedia | null> {
             const best = info.formats.find((f: any) => f.vcodec !== "none" && f.acodec !== "none") || info.formats[info.formats.length - 1];
             return { 
                 url: best.url, 
-                referer: info.http_headers?.Referer || info.webpage_url || url 
+                referer: info.http_headers?.Referer || undefined 
             };
         }
     } catch (e) {}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade } from "svelte/transition";
 	import Hls from "hls.js";
-	import { socket, roomState, isWaitingForOthers, emitAction, currentRoomId } from "../stores/socket";
+	import { socket, roomState, isWaitingForOthers, isVideoChanging, emitAction, currentRoomId } from "../stores/socket";
 	import SeekTooltip from "./player/SeekTooltip.svelte";
 	import Controls from "./player/Controls.svelte";
 
@@ -407,10 +407,18 @@
 		on:error={handleVideoError}
 	></video>
 
-	{#if $isWaitingForOthers || localIsBuffering}
+	{#if $isWaitingForOthers || localIsBuffering || $isVideoChanging}
 		<div class="loading-overlay" transition:fade={{ duration: 200 }}>
 			<div class="spinner"></div>
-			<p>{localIsBuffering ? "Loading..." : "Waiting for others..."}</p>
+			<p>
+				{#if $isVideoChanging}
+					Changing video...
+				{:else if localIsBuffering}
+					Loading...
+				{:else}
+					Waiting for others...
+				{/if}
+			</p>
 		</div>
 	{/if}
 
