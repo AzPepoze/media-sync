@@ -61,9 +61,7 @@
 
 		<div class="sidebar-area" class:mobile-open={showSidebar}>
 			<div class="sidebar-header-wrapper">
-				<!-- svelte-ignore a11y-click-events-have-key-events -->
-				<!-- svelte-ignore a11y-no-static-element-interactions -->
-				<div class="sidebar-header" on:click={goHome} title="Return to Welcome Page">
+				<div class="sidebar-header">
 					<img src="/logo.png" alt="Media Sync" class="mini-logo" />
 					<div class="header-text">
 						<span class="brand-name">Media Sync</span>
@@ -222,12 +220,6 @@
 			align-items: center;
 			gap: 0.7rem;
 			padding: 1rem;
-			cursor: pointer;
-			transition: background 0.2s;
-
-			&:hover {
-				background: #292b2f;
-			}
 
 			.mini-logo {
 				height: 28px;
