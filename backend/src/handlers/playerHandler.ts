@@ -5,9 +5,9 @@ import { resolveVideoUrl } from "../utils/ytdlp";
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
 		if (rooms[roomId]) {
-			const finalUrl = await resolveVideoUrl(url);
-			rooms[roomId].videoUrl = finalUrl;
-			rooms[roomId].referer = referer || null;
+			const resolved = await resolveVideoUrl(url);
+			rooms[roomId].videoUrl = resolved.url;
+			rooms[roomId].referer = resolved.referer || referer || null;
 			rooms[roomId].currentTime = 0;
 			rooms[roomId].isPlaying = true;
 			rooms[roomId].lastUpdated = Date.now();
