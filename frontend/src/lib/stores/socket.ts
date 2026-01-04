@@ -32,16 +32,6 @@ export function initSocket() {
 	socketInstance.on("connect", () => {
 		console.log("[Socket] Connected:", socketInstance.id);
 		isConnected.set(true);
-
-		// Auto re-join if we have the info
-		const savedRoomId = localStorage.getItem("roomId");
-		const savedNickname = localStorage.getItem("nickname");
-		if (savedRoomId && savedNickname) {
-			console.log("[Socket] Auto-rejoining room:", savedRoomId);
-			socketInstance.emit("join_room", { roomId: savedRoomId, nickname: savedNickname });
-			isJoined.set(true);
-			currentRoomId.set(savedRoomId);
-		}
 	});
 
 	socketInstance.on("disconnect", (reason) => {
@@ -95,7 +85,6 @@ export function joinRoom(roomId: string, nickname: string) {
 	if (!socketInstance) initSocket();
 	socketInstance.emit("join_room", { roomId, nickname });
 	localStorage.setItem("nickname", nickname);
-	localStorage.setItem("roomId", roomId);
 	currentRoomId.set(roomId);
 	isJoined.set(true);
 

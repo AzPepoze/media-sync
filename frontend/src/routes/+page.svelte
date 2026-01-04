@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { onMount, onDestroy } from "svelte";
+	import { onDestroy } from "svelte";
 	import { fade } from "svelte/transition";
 	import {
 		isJoined,
-		initSocket,
 		cleanupSocket,
 		currentRoomId,
 		leaveRoom,
@@ -17,16 +16,6 @@
 
 	let activeTab: "users" | "collections" = "users";
 	let showSidebar = false;
-
-	onMount(() => {
-		const savedRoomId = localStorage.getItem("roomId");
-		const savedNickname = localStorage.getItem("nickname");
-
-		// Only init socket if we were previously in a room (for auto-rejoin)
-		if (savedRoomId && savedNickname) {
-			initSocket();
-		}
-	});
 
 	onDestroy(() => {
 		cleanupSocket();
