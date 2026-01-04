@@ -79,12 +79,15 @@ export function initSocket() {
 
 	socketInstance.on("player_action", (data: { action: string; time: number }) => {
 		console.log("[Socket] Player action received:", data);
-		roomState.update((s) => ({
-			...s,
-			isPlaying: data.action === "play",
-			currentTime: data.time,
-			lastUpdated: Date.now(),
-		}));
+		roomState.update((s) => {
+			const isPlaying = data.action === "play" ? true : (data.action === "pause" ? false : s.isPlaying);
+			return {
+				...s,
+				isPlaying,
+				currentTime: data.time,
+				lastUpdated: isPlaying ? Date.now() : 0,
+			};
+		});
 	});
 }
 

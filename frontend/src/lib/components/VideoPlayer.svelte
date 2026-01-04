@@ -118,13 +118,20 @@
 			if (!videoElement) return;
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
-			// Handle Seek separately for robust loop prevention
 			if (data.action === "seek") {
 				console.log("[Player] Remote seek to", data.time);
 				isRemoteSeeking = true;
 				videoElement.currentTime = data.time;
+
 				localIsBuffering = true;
 				emitAction("buffering_start", $currentRoomId);
+
+				// Safety: If the video is already at this time, onSeeked might not fire
+				setTimeout(() => {
+					if (isRemoteSeeking && Math.abs(videoElement.currentTime - data.time) < 0.2) {
+						onSeeked();
+					}
+				}, 1000);
 				return;
 			}
 			isRemoteActionActive = true;
@@ -147,7 +154,7 @@
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!videoElement) return;
 			console.log("[Player] Room buffering updated:", isBuffering);
-			
+
 			isRemoteActionActive = true;
 			if (isBuffering) {
 				if (!videoElement.paused) {
@@ -161,7 +168,9 @@
 				}
 				isPlaying = true;
 			}
-			setTimeout(() => { isRemoteActionActive = false; }, 200);
+			setTimeout(() => {
+				isRemoteActionActive = false;
+			}, 200);
 		});
 	}
 
@@ -464,13 +473,13 @@
 	{/if}
 
 	{#if hasError || $roomError}
-		<ErrorOverlay 
-			errorMessage={errorMessage || $roomError || ""} 
+		<ErrorOverlay
+			errorMessage={errorMessage || $roomError || ""}
 			onRetry={() => {
 				roomError.set(null);
 				hasError = false;
 				loadVideo(currentLoadedUrl, currentLoadedReferer);
-			}} 
+			}}
 		/>
 	{/if}
 
