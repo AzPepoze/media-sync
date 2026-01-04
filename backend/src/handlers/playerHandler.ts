@@ -42,7 +42,9 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("seek", ({ roomId, time }: { roomId: string; time: number }) => {
 		if (rooms[roomId]) {
 			rooms[roomId].currentTime = time;
-			socket.to(roomId).emit("player_action", { action: "seek", time });
+			rooms[roomId].lastUpdated = Date.now();
+			// Broadcast to everyone including sender to ensure sync
+			io.to(roomId).emit("player_action", { action: "seek", time });
 		}
 	});
 

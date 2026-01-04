@@ -74,7 +74,14 @@
 			ignoreNextEvent = true;
 			if (!videoElement) return;
 			const diff = Math.abs(videoElement.currentTime - data.time);
-			if (diff > 0.5) videoElement.currentTime = data.time;
+			if (diff > 0.5 || data.action === "seek") {
+				videoElement.currentTime = data.time;
+				if (data.action === "seek") {
+					// Force buffering state on seek for everyone
+					localIsBuffering = true;
+					emitAction("buffering_start", $currentRoomId);
+				}
+			}
 			if (data.action === "play") {
 				isPlaying = true;
 				videoElement.play().catch(() => {
