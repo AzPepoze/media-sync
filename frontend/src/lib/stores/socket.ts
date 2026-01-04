@@ -17,6 +17,7 @@ export const roomState = writable<RoomState>({
 });
 export const isWaitingForOthers = writable(false);
 export const isVideoChanging = writable(false);
+export const roomError = writable<string | null>(null);
 
 // --- Actions ---
 const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
@@ -67,6 +68,13 @@ export function initSocket() {
 	socketInstance.on("room_buffering", (isBuffering: boolean) => {
 		console.log("[Socket] Room buffering status:", isBuffering);
 		isWaitingForOthers.set(isBuffering);
+	});
+
+	socketInstance.on("room_error", (msg: string) => {
+		console.error("[Socket] Room error received:", msg);
+		roomError.set(msg);
+		// Auto-clear error after 5 seconds
+		setTimeout(() => roomError.set(null), 5000);
 	});
 
 	socketInstance.on("player_action", (data: { action: string; time: number }) => {

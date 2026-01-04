@@ -14,15 +14,26 @@ export const resolveVideoUrl = async (url: string): Promise<ResolvedMedia> => {
 	const lowerUrl = url.toLowerCase().split("?")[0];
 
 	if (COMMON_VIDEO_EXTENSIONS.some((ext) => lowerUrl.endsWith(ext))) {
+		console.log(`[YTDLP] Detected direct video link: ${url}`);
 		return { url };
 	}
 
+	console.log(`[YTDLP] Attempting to resolve URL: ${url}`);
+	console.log("[YTDLP] Trying Normal Strategy...");
 	const normalResult = await tryNormalStrategy(url);
-	if (normalResult) return normalResult;
+	if (normalResult) {
+		console.log("[YTDLP] Normal Strategy succeeded.");
+		return normalResult;
+	}
 
+	console.log("[YTDLP] Normal Strategy failed. Trying Advanced Strategy...");
 	const advancedResult = await tryAdvancedStrategy(url);
-	if (advancedResult) return advancedResult;
+	if (advancedResult) {
+		console.log("[YTDLP] Advanced Strategy succeeded.");
+		return advancedResult;
+	}
 
+	console.error("[YTDLP] All strategies failed to resolve URL.");
 	throw new Error("Unable to resolve video URL");
 };
 
@@ -31,9 +42,10 @@ async function tryNormalStrategy(url: string): Promise<ResolvedMedia | null> {
 		const { stdout } = await execAsync(`yt-dlp -g --no-check-certificates --no-warnings "${url}"`);
 		const resolvedUrl = stdout.trim().split("\n")[0];
 		if (resolvedUrl && resolvedUrl.startsWith("http")) {
-			return { url: resolvedUrl }; // No more forced referer here
+			return { url: resolvedUrl };
 		}
-	} catch (e) {
+	} catch (e: any) {
+		console.warn(`[YTDLP] Normal Strategy Error: ${e.message}`);
 		return null;
 	}
 	return null;
@@ -61,6 +73,8 @@ async function tryAdvancedStrategy(url: string): Promise<ResolvedMedia | null> {
 				referer: info.http_headers?.Referer || undefined,
 			};
 		}
-	} catch (e) {}
+	} catch (e: any) {
+		console.error(`[YTDLP] Advanced Strategy Error: ${e.message}`);
+	}
 	return null;
 }

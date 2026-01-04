@@ -27,8 +27,11 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 				console.log(`[Player] URL resolved successfully for room ${roomId}`);
 				io.to(roomId).emit("sync_state", rooms[roomId]);
 			} catch (error) {
+				io.to(roomId).emit(
+					"room_error",
+					"Failed to resolve video URL. Please try another link or a direct media link."
+				);
 				console.error(`[Player] Failed to resolve URL for room ${roomId}:`, error);
-				io.to(roomId).emit("room_error", "Failed to resolve video URL. Please try another link.");
 			}
 		}
 	});
