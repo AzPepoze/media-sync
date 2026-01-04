@@ -125,6 +125,7 @@
 				videoElement.currentTime = data.time;
 				localIsBuffering = true;
 				emitAction("buffering_start", $currentRoomId);
+				// IMPORTANT: Keep isPlaying status as is, don't force play
 				return;
 			}
 			isRemoteActionActive = true;
