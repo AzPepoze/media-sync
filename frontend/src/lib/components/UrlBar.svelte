@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { roomState, setUrl, currentRoomId } from "../stores/socket";
+	import { roomState, setUrl, currentRoomId, isVideoChanging } from "../stores/socket";
 
 	let inputUrl = "";
 	let refererUrl = "";
@@ -25,8 +25,10 @@
 	function handleLoad() {
 		if ($currentRoomId && inputUrl.trim()) {
 			isLoading = true;
+			isVideoChanging.set(true); // Instant feedback locally
 			setUrl($currentRoomId, inputUrl, refererUrl);
-			setTimeout(() => { isLoading = false; }, 15000);
+			// Security fallback: if backend fails to respond, reset loading after 15s
+			setTimeout(() => { isLoading = false; isVideoChanging.set(false); }, 15000);
 		}
 	}
 

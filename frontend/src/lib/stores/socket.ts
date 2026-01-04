@@ -40,11 +40,13 @@ export function initSocket() {
 	});
 
 	socketInstance.on("sync_state", (state: RoomState) => {
+		console.log("Sync state received:", state.videoUrl);
 		roomState.set(state);
 		isVideoChanging.set(false); // Reset when new video state arrives
 	});
 
 	socketInstance.on("video_changing", () => {
+		console.log("Video is changing...");
 		isVideoChanging.set(true);
 	});
 
