@@ -1,10 +1,12 @@
 import { Server, Socket } from "socket.io";
 import { rooms, roomUsers } from "../store";
+import { resolveVideoUrl } from "../utils/ytdlp";
 
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
-	socket.on("set_url", ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
+	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
 		if (rooms[roomId]) {
-			rooms[roomId].videoUrl = url;
+			const finalUrl = await resolveVideoUrl(url);
+			rooms[roomId].videoUrl = finalUrl;
 			rooms[roomId].referer = referer || null;
 			rooms[roomId].currentTime = 0;
 			rooms[roomId].isPlaying = true;
