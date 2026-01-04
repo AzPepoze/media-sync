@@ -93,7 +93,7 @@
 			}
 			setTimeout(() => {
 				ignoreNextEvent = false;
-			}, 500);
+			}, 800);
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
@@ -293,20 +293,31 @@
 			emitAction("pause", { roomId: $currentRoomId, time: videoElement.currentTime });
 	}
 	function onSeeked() {
+		// Clear buffering state if we were seeking
+		if (localIsBuffering) {
+			localIsBuffering = false;
+			emitAction("buffering_end", $currentRoomId);
+		}
+		
 		if (!ignoreNextEvent) {
 			emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
 		}
 	}
+
 	function onWaiting() {
-		localIsBuffering = true;
-		emitAction("buffering_start", $currentRoomId);
+		if (!localIsBuffering) {
+			localIsBuffering = true;
+			emitAction("buffering_start", $currentRoomId);
+		}
 	}
+
 	function onPlaying() {
 		if (localIsBuffering) {
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 		}
 	}
+
 	function onCanPlay() {
 		if (localIsBuffering) {
 			localIsBuffering = false;
@@ -345,7 +356,8 @@
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const percent = (e.clientX - rect.left) / rect.width;
 		const newTime = percent * duration;
-		videoElement.currentTime = newTime;
+		// DON'T set local time here, let the socket broadcast it back
+		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 
 	function handleSeekHover(e: MouseEvent) {
@@ -393,7 +405,7 @@
 	function skipTime(seconds: number) {
 		if (!videoElement) return;
 		const newTime = Math.max(0, Math.min(duration, videoElement.currentTime + seconds));
-		videoElement.currentTime = newTime;
+		// DON'T set local time here, let the socket broadcast it back
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 
