@@ -11,7 +11,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 			const resolved = await resolveVideoUrl(url);
 			rooms[roomId].videoUrl = resolved.url;
 			
-			// Use only resolved referer or user-provided referer. Do NOT fallback to 'url'.
+			// Use only resolved referer or user-provided referer.
 			const finalReferer = resolved.referer || referer;
 			rooms[roomId].referer = (finalReferer && finalReferer.trim() !== "") ? finalReferer : null;
 			
