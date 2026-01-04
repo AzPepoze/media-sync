@@ -147,20 +147,21 @@
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!videoElement) return;
 			console.log("[Player] Room buffering updated:", isBuffering);
-
+			
 			isRemoteActionActive = true;
 			if (isBuffering) {
 				if (!videoElement.paused) {
 					videoElement.pause();
 					isPlaying = false;
 				}
-			} else if ($roomState.isPlaying && videoElement.paused && !localIsBuffering) {
-				videoElement.play().catch(() => {});
+			} else if ($roomState.isPlaying && !localIsBuffering) {
+				// Room should be playing and we are not buffering anymore
+				if (videoElement.paused) {
+					videoElement.play().catch(() => {});
+				}
 				isPlaying = true;
 			}
-			setTimeout(() => {
-				isRemoteActionActive = false;
-			}, 200);
+			setTimeout(() => { isRemoteActionActive = false; }, 200);
 		});
 	}
 
