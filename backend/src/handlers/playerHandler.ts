@@ -61,36 +61,38 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 		}
 	});
 
-	// Buffering Logic Helper
-	const updateBuffering = (roomId: string, socketId: string, isBuffering: boolean) => {
-		if (!roomUsers[roomId] || !rooms[roomId]) return;
-
-		const user = roomUsers[roomId].find((u) => u.id === socketId);
-		if (user) {
-			user.isBuffering = isBuffering;
-			io.to(roomId).emit("room_users", roomUsers[roomId]);
-		}
-
-		const anyBuffering = roomUsers[roomId].some((u) => u.isBuffering);
-		io.to(roomId).emit("room_buffering", anyBuffering);
-
-		if (!anyBuffering && rooms[roomId].isPlaying) {
-			// Calculate where the video should be right now
-			let syncTime = rooms[roomId].currentTime;
-			if (rooms[roomId].lastUpdated) {
-				const elapsed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
-				syncTime += elapsed;
+		// Buffering Logic Helper
+		const updateBuffering = (roomId: string, socketId: string, isBuffering: boolean) => {
+			if (!roomUsers[roomId] || !rooms[roomId]) return;
+	
+			const user = roomUsers[roomId].find((u) => u.id === socketId);
+			if (user) {
+				user.isBuffering = isBuffering;
+				io.to(roomId).emit("room_users", roomUsers[roomId]);
 			}
-
-			// Update server state to this new point
-			rooms[roomId].currentTime = syncTime;
-			rooms[roomId].lastUpdated = Date.now();
-
-			// Resume everyone at the precisely calculated time
-			io.to(roomId).emit("player_action", { action: "play", time: syncTime });
-		}
-	};
-
+	
+			const anyBuffering = roomUsers[roomId].some((u) => u.isBuffering);
+			
+			// If someone starts buffering and it was playing, 
+			// "freeze" the time by setting lastUpdated to null
+			if (anyBuffering && rooms[roomId].isPlaying && rooms[roomId].lastUpdated) {
+				const elapsed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
+				rooms[roomId].currentTime += elapsed;
+				rooms[roomId].lastUpdated = 0; // Freeze the clock
+				console.log(`[Buffering] Room ${roomId} time frozen at ${rooms[roomId].currentTime}`);
+			}
+	
+			io.to(roomId).emit("room_buffering", anyBuffering);
+	
+			if (!anyBuffering && rooms[roomId].isPlaying) {
+				// Resume playback from the frozen point
+				rooms[roomId].lastUpdated = Date.now();
+				console.log(`[Buffering] Room ${roomId} resumed at ${rooms[roomId].currentTime}`);
+	
+				// Resume everyone at the current precisely calculated time
+				io.to(roomId).emit("player_action", { action: "play", time: rooms[roomId].currentTime });
+			}
+		};
 	socket.on("buffering_start", (roomId: string) => {
 		updateBuffering(roomId, socket.id, true);
 	});
