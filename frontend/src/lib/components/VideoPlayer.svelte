@@ -14,6 +14,8 @@
 	let localIsBuffering = false;
 	let hasError = false;
 	let errorMessage = "";
+	let retryCount = 0;
+	const MAX_RETRIES = 2;
 
 	let isPlaying = false;
 	let currentTime = 0;
@@ -119,7 +121,11 @@
 		currentTime = startTime;
 		buffered = 0;
 		isPlaying = shouldPlay;
+		retryCount = 0; // Reset retry count for new video
 		
+		// Reset changing state
+		isVideoChanging.set(false);
+
 		// Prevent emitting events during initial load/seek
 		ignoreNextEvent = true;
 
@@ -167,6 +173,12 @@
 				
 				// Handle unrecoverable HTTP errors immediately, even if not marked as fatal yet
 				if (data.type === Hls.ErrorTypes.NETWORK_ERROR && status && (status === 403 || status === 404)) {
+					if (retryCount < MAX_RETRIES) {
+						retryCount++;
+						console.log(`Retrying HLS load (${retryCount}/${MAX_RETRIES})...`);
+						setTimeout(() => hls?.loadSource(videoUrl), 1000);
+						return;
+					}
 					hls?.destroy();
 					const msg = status === 403 ? "Access denied" : "Not found";
 					showError(`${msg} (${status}).`);
@@ -286,6 +298,17 @@
 
 	function handleVideoError() {
 		if (hls) return; // Let HLS handler manage its own errors
+		
+		if (retryCount < MAX_RETRIES) {
+			retryCount++;
+			console.log(`Retrying video load (${retryCount}/${MAX_RETRIES})...`);
+			setTimeout(() => {
+				videoElement.load();
+				if (isPlaying) videoElement.play().catch(() => {});
+			}, 1000);
+			return;
+		}
+
 		showError("Video failed to load (403/404).");
 	}
 

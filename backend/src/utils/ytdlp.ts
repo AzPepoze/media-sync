@@ -48,7 +48,7 @@ async function tryAdvancedStrategy(url: string): Promise<ResolvedMedia | null> {
         if (info && info.url) {
             return { 
                 url: info.url, 
-                referer: (info.http_headers?.Referer && info.http_headers.Referer !== url) ? info.http_headers.Referer : undefined 
+                referer: info.http_headers?.Referer || undefined
             };
         }
         
@@ -56,7 +56,7 @@ async function tryAdvancedStrategy(url: string): Promise<ResolvedMedia | null> {
             const best = info.formats.find((f: any) => f.vcodec !== "none" && f.acodec !== "none") || info.formats[info.formats.length - 1];
             return { 
                 url: best.url, 
-                referer: (info.http_headers?.Referer && info.http_headers.Referer !== url) ? info.http_headers.Referer : undefined 
+                referer: info.http_headers?.Referer || undefined
             };
         }
     } catch (e) {}

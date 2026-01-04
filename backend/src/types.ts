@@ -1,4 +1,4 @@
-export interface RoomState {
+export interface Room {
 	videoUrl: string | null;
 	referer: string | null;
 	isPlaying: boolean;

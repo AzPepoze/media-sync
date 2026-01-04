@@ -5,15 +5,15 @@ import { resolveVideoUrl } from "../utils/ytdlp";
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
 		if (rooms[roomId]) {
-			// Notify everyone immediately
+			// Notify everyone immediately that we are processing
 			io.to(roomId).emit("video_changing");
 
 			const resolved = await resolveVideoUrl(url);
 			rooms[roomId].videoUrl = resolved.url;
 			
-			// Only set referer if it's provided, not empty, and different from the target URL
+			// Use only resolved referer or user-provided referer. Do NOT fallback to 'url'.
 			const finalReferer = resolved.referer || referer;
-			rooms[roomId].referer = (finalReferer && finalReferer.trim() !== "" && finalReferer !== url) ? finalReferer : null;
+			rooms[roomId].referer = (finalReferer && finalReferer.trim() !== "") ? finalReferer : null;
 			
 			rooms[roomId].currentTime = 0;
 			rooms[roomId].isPlaying = true;
