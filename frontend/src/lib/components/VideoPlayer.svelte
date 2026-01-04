@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { fade } from "svelte/transition";
 	import Hls from "hls.js";
 	import {
 		socket,
@@ -9,21 +8,30 @@
 		emitAction,
 		currentRoomId,
 	} from "../stores/socket";
+	// Sub-components
 	import SeekTooltip from "./player/SeekTooltip.svelte";
 	import Controls from "./player/Controls.svelte";
+	import LoadingOverlay from "./player/LoadingOverlay.svelte";
+	import ErrorOverlay from "./player/ErrorOverlay.svelte";
+	import NoVideoOverlay from "./player/NoVideoOverlay.svelte";
 
 	let videoElement: HTMLVideoElement;
 	let peekVideo: HTMLVideoElement;
 	let hls: Hls | null = null;
 	let peekHls: Hls | null = null;
+
+	// State Tracking
 	let currentLoadedUrl = "";
-	let ignoreNextEvent = false;
+	let currentLoadedReferer = "";
+	let isRemoteActionActive = false;
+	let isRemoteSeeking = false;
 	let localIsBuffering = false;
 	let hasError = false;
 	let errorMessage = "";
 	let retryCount = 0;
 	const MAX_RETRIES = 2;
 
+	// UI State
 	let isPlaying = false;
 	let currentTime = 0;
 	let duration = 0;
@@ -37,6 +45,8 @@
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
 
+	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+
 	function showControlsTemp() {
 		showControls = true;
 		hideCursor = false;
@@ -49,39 +59,58 @@
 		}
 	}
 
-	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-
-	let currentLoadedReferer = "";
-
 	function loadCurrentVideo() {
-		if ($roomState.videoUrl) {
-			const stateReferer = $roomState.referer || "";
-			if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
-				let startTime = $roomState.currentTime;
-				if ($roomState.isPlaying && $roomState.lastUpdated) {
-					const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
-					startTime += elapsed;
-				}
-				loadVideo($roomState.videoUrl, stateReferer, startTime, $roomState.isPlaying);
+		if (!$roomState?.videoUrl) return;
+		const stateReferer = $roomState.referer || "";
+
+		let targetTime = $roomState.currentTime;
+		if ($roomState.isPlaying && $roomState.lastUpdated) {
+			const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
+			targetTime += elapsed;
+		}
+
+		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
+			loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
+		} else if (videoElement) {
+			const diff = Math.abs(videoElement.currentTime - targetTime);
+			if (diff > 2) {
+				isRemoteActionActive = true;
+				videoElement.currentTime = targetTime;
+				setTimeout(() => (isRemoteActionActive = false), 500);
+			}
+
+			if ($roomState.isPlaying && videoElement.paused && !$isWaitingForOthers && !localIsBuffering) {
+				videoElement.play().catch(() => {});
+			} else if (!$roomState.isPlaying && !videoElement.paused) {
+				videoElement.pause();
 			}
 		}
 	}
 
-	$: $roomState.videoUrl && loadCurrentVideo();
+	$: if ($roomState) loadCurrentVideo();
 
 	$: if ($socket) {
+		$socket.off("connect");
+		$socket.off("player_action");
+		$socket.off("room_buffering");
+
+		$socket.on("connect", () => {
+			currentLoadedUrl = "";
+			loadCurrentVideo();
+		});
+
 		$socket.on("player_action", (data: { action: string; time: number }) => {
-			ignoreNextEvent = true;
 			if (!videoElement) return;
-			const diff = Math.abs(videoElement.currentTime - data.time);
-			if (diff > 0.5 || data.action === "seek") {
+			if (data.action === "seek") {
+				isRemoteSeeking = true;
 				videoElement.currentTime = data.time;
-				if (data.action === "seek") {
-					// Force buffering state on seek for everyone
-					localIsBuffering = true;
-					emitAction("buffering_start", $currentRoomId);
-				}
+				localIsBuffering = true;
+				emitAction("buffering_start", $currentRoomId);
+				return;
 			}
+			isRemoteActionActive = true;
+			const diff = Math.abs(videoElement.currentTime - data.time);
+			if (diff > 0.5) videoElement.currentTime = data.time;
 			if (data.action === "play") {
 				isPlaying = true;
 				videoElement.play().catch(() => {
@@ -92,35 +121,28 @@
 				isPlaying = false;
 			}
 			setTimeout(() => {
-				ignoreNextEvent = false;
+				isRemoteActionActive = false;
 			}, 800);
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!videoElement) return;
+			isRemoteActionActive = true;
 			if (isBuffering) {
 				if (!videoElement.paused) {
-					ignoreNextEvent = true;
 					videoElement.pause();
 					isPlaying = false;
-					setTimeout(() => {
-						ignoreNextEvent = false;
-					}, 100);
 				}
 			} else if ($roomState.isPlaying && videoElement.paused && !localIsBuffering) {
-				ignoreNextEvent = true;
 				videoElement.play().catch(() => {});
 				isPlaying = true;
-				setTimeout(() => {
-					ignoreNextEvent = false;
-				}, 100);
 			}
+			setTimeout(() => {
+				isRemoteActionActive = false;
+			}, 200);
 		});
 	}
 
-	//-------------------------------------------------------
-	// Helper Functions
-	//-------------------------------------------------------
 	function getProxyUrl(url: string, referer: string = ""): string {
 		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
 		if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
@@ -140,10 +162,8 @@
 		currentTime = startTime;
 		buffered = 0;
 		isPlaying = shouldPlay;
-		retryCount = 0; // Reset retry count for new video
-
-		// Prevent emitting events during initial load/seek
-		ignoreNextEvent = true;
+		retryCount = 0;
+		isRemoteActionActive = true;
 
 		if (videoElement) {
 			videoElement.pause();
@@ -151,9 +171,10 @@
 			videoElement.removeAttribute("src");
 			videoElement.load();
 		}
+
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
-
+		
 		const videoUrl = getProxyUrl(url, referer);
 
 		if (hls) {
@@ -164,110 +185,57 @@
 		if (Hls.isSupported() && isHlsSource(url)) {
 			hls = new Hls({
 				capLevelToPlayerSize: true,
-				manifestLoadingMaxRetry: 1,
-				levelLoadingMaxRetry: 1,
-				fragLoadingMaxRetry: 2,
+				manifestLoadingMaxRetry: 2,
+				levelLoadingMaxRetry: 2,
+				fragLoadingMaxRetry: 3,
+				enableWorker: true,
 			});
-
 			hls.on(Hls.Events.MANIFEST_PARSED, () => {
-				retryCount = 0;
-				isVideoChanging.set(false); // Reset UI ONLY when manifest is ready
+				isVideoChanging.set(false);
 				if (videoElement) {
 					videoElement.currentTime = startTime;
-					if (shouldPlay) {
-						videoElement.play().catch(() => {});
-					}
+					if (shouldPlay) videoElement.play().catch(() => {});
 				}
 				setTimeout(() => {
-					ignoreNextEvent = false;
+					isRemoteActionActive = false;
 				}, 2000);
 			});
-
 			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
 			hls.on(Hls.Events.ERROR, (e, data) => {
-				const status = data.response?.code;
-
-				// Handle unrecoverable HTTP errors immediately, even if not marked as fatal yet
-				if (data.type === Hls.ErrorTypes.NETWORK_ERROR && status && (status === 403 || status === 404)) {
-					if (retryCount < MAX_RETRIES) {
-						retryCount++;
-						console.log(`Retrying HLS full load (${retryCount}/${MAX_RETRIES})...`);
-						setTimeout(() => {
-							if (hls) {
-								hls.loadSource(videoUrl);
-								hls.attachMedia(videoElement);
-							}
-						}, 500);
-						return;
-					}
-					hls?.destroy();
-					const msg = status === 403 ? "Access denied" : "Not found";
-					showError(`${msg} (${status}).`);
-					return;
-				}
-
 				if (data.fatal) {
-					if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-						if (status && status >= 400 && status !== 401) {
-							hls?.destroy();
-							showError(`Stream load failed (${status}).`);
-						} else {
-							// For 401 or other errors, try to keep loading or just stay quiet
-							hls?.startLoad();
-						}
+					const status = data.response?.code;
+					if (retryCount < MAX_RETRIES && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+						retryCount++;
+						setTimeout(() => hls?.loadSource(videoUrl), 1000);
 					} else {
 						hls?.destroy();
-						showError("Stream connection failed.");
+						showError(status ? `Error ${status}: Failed to load stream.` : "Playback failed.");
 					}
 				}
 			});
-			// Clean up peek HLS if main video changes
-			if (peekHls) {
-				peekHls.destroy();
-				peekHls = null;
-			}
 		} else {
 			videoElement.src = videoUrl;
 			videoElement.currentTime = startTime;
 			videoElement.oncanplay = () => {
-				retryCount = 0;
-				isVideoChanging.set(false); // Reset UI when video is ready
+				isVideoChanging.set(false);
+				if (shouldPlay) videoElement.play().catch(() => {});
+				setTimeout(() => {
+					isRemoteActionActive = false;
+				}, 2000);
 			};
 			videoElement.load();
-			if (shouldPlay) {
-				videoElement.play().catch(() => {});
-			}
-			setTimeout(() => {
-				ignoreNextEvent = false;
-			}, 2000);
 		}
 	}
 
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
-
 		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
-
-		// Prevent reloading MP4 peek if already set
-		if (!isHlsSource(currentLoadedUrl) && peekVideo && peekVideo.getAttribute("src") === videoUrl) return;
-
 		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
-			peekHls = new Hls({
-				autoStartLoad: true,
-				maxBufferLength: 1,
-				maxMaxBufferLength: 2,
-				startLevel: 0,
-				manifestLoadingMaxRetry: 0,
-				levelLoadingMaxRetry: 0,
-			});
-			peekHls.on(Hls.Events.MANIFEST_PARSED, () => {
-				if (peekHls) peekHls.currentLevel = 0;
-			});
+			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, startLevel: 0 });
 			peekHls.loadSource(videoUrl);
 			peekHls.attachMedia(peekVideo);
 		} else if (peekVideo) {
-			// Handle MP4 peek via proxy as well
 			peekVideo.src = videoUrl;
 			peekVideo.load();
 		}
@@ -279,27 +247,31 @@
 			buffered = (videoElement.buffered.end(videoElement.buffered.length - 1) / duration) * 100;
 		}
 	}
-	function onDurationChange() {
-		duration = videoElement.duration;
-	}
+
 	function onPlay() {
 		isPlaying = true;
-		if (!ignoreNextEvent && !$isWaitingForOthers && !localIsBuffering)
+		if (!isRemoteActionActive && !isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
 			emitAction("play", { roomId: $currentRoomId, time: videoElement.currentTime });
+		}
 	}
+
 	function onPause() {
 		isPlaying = false;
-		if (!ignoreNextEvent && !$isWaitingForOthers && !localIsBuffering)
+		if (!isRemoteActionActive && !isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
 			emitAction("pause", { roomId: $currentRoomId, time: videoElement.currentTime });
+		}
 	}
+
 	function onSeeked() {
-		// Clear buffering state if we were seeking
 		if (localIsBuffering) {
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 		}
-		
-		if (!ignoreNextEvent) {
+		if (isRemoteSeeking) {
+			isRemoteSeeking = false;
+			return;
+		}
+		if (!isRemoteActionActive) {
 			emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
 		}
 	}
@@ -334,18 +306,12 @@
 
 	function handleVideoError() {
 		if (hls) return;
-
 		if (retryCount < MAX_RETRIES) {
 			retryCount++;
-			console.log(`Retrying video load (${retryCount}/${MAX_RETRIES})...`);
-			setTimeout(() => {
-				loadCurrentVideo();
-				if (isPlaying) videoElement.play().catch(() => {});
-			}, 500);
-			return;
+			setTimeout(() => loadCurrentVideo(), 1000);
+		} else {
+			showError("Video load failed.");
 		}
-
-		showError("Video failed to load (403/404).");
 	}
 
 	function togglePlay() {
@@ -356,7 +322,7 @@
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const percent = (e.clientX - rect.left) / rect.width;
 		const newTime = percent * duration;
-		// DON'T set local time here, let the socket broadcast it back
+
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 
@@ -366,46 +332,41 @@
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		seekHoverPercent = (e.clientX - rect.left) / rect.width;
 		seekHoverTime = seekHoverPercent * duration;
-
 		if (peekVideo && !isNaN(seekHoverTime)) {
 			if (Math.abs(peekVideo.currentTime - seekHoverTime) > 0.2) peekVideo.currentTime = seekHoverTime;
 		}
 	}
 
 	function handleVolume(e: Event) {
-		const val = parseFloat((e.target as HTMLInputElement).value);
-		volume = val;
-		videoElement.volume = val;
-		isMuted = val === 0;
+		volume = parseFloat((e.target as HTMLInputElement).value);
+		videoElement.volume = volume;
+		isMuted = volume === 0;
 	}
+
 	function toggleMute() {
 		isMuted = !isMuted;
-		videoElement.muted = isMuted;
 		volume = isMuted ? 0 : 1;
 		videoElement.volume = volume;
+		videoElement.muted = isMuted;
 	}
+
 	function toggleFullscreen() {
 		const wrapper = videoElement.parentElement;
 		if (!document.fullscreenElement) wrapper?.requestFullscreen();
 		else document.exitFullscreen();
 	}
+
 	async function togglePip() {
 		try {
 			if (document.pictureInPictureElement) await document.exitPictureInPicture();
-			else if (videoElement) {
-				if (typeof videoElement.requestPictureInPicture === "function")
-					await videoElement.requestPictureInPicture();
-				else if ((videoElement as any).webkitSetPresentationMode)
-					(videoElement as any).webkitSetPresentationMode("picture-in-picture");
-			}
+			else if (videoElement?.requestPictureInPicture) await videoElement.requestPictureInPicture();
 		} catch (err) {
 			console.error("PiP failed:", err);
 		}
 	}
+
 	function skipTime(seconds: number) {
-		if (!videoElement) return;
 		const newTime = Math.max(0, Math.min(duration, videoElement.currentTime + seconds));
-		// DON'T set local time here, let the socket broadcast it back
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 
@@ -419,14 +380,10 @@
 	function handleKeydown(e: KeyboardEvent) {
 		const target = e.target as HTMLElement;
 		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-
 		switch (e.key.toLowerCase()) {
 			case " ":
-				e.preventDefault();
-				togglePlay();
-				showControlsTemp();
-				break;
 			case "k":
+				e.preventDefault();
 				togglePlay();
 				showControlsTemp();
 				break;
@@ -461,7 +418,7 @@
 		bind:this={videoElement}
 		playsinline
 		on:timeupdate={onTimeUpdate}
-		on:durationchange={onDurationChange}
+		on:durationchange={() => (duration = videoElement.duration)}
 		on:play={onPlay}
 		on:pause={onPause}
 		on:seeked={onSeeked}
@@ -472,55 +429,14 @@
 		on:error={handleVideoError}
 	></video>
 
-	{#if $isVideoChanging || ($roomState.videoUrl && (localIsBuffering || $isWaitingForOthers))}
-		<div class="loading-overlay" transition:fade={{ duration: 200 }}>
-			<div class="spinner"></div>
-			<p>
-				{#if $isVideoChanging}
-					Changing video...
-				{:else if localIsBuffering}
-					Loading...
-				{:else}
-					Waiting for others...
-				{/if}
-			</p>
-		</div>
-	{:else if !$roomState.videoUrl}
-		<div class="no-video-overlay" transition:fade={{ duration: 200 }}>
-			<div class="no-video-icon">
-				<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 7v5l3 3"/></svg>
-			</div>
-			<h3>No video selected</h3>
-			<p>Enter a URL in the bar below to start watching together</p>
-		</div>
+	{#if $isVideoChanging || ($roomState?.videoUrl && (localIsBuffering || $isWaitingForOthers))}
+		<LoadingOverlay isVideoChanging={$isVideoChanging} {localIsBuffering} />
+	{:else if !$roomState?.videoUrl}
+		<NoVideoOverlay />
 	{/if}
 
 	{#if hasError}
-		<div class="error-overlay" transition:fade={{ duration: 200 }}>
-			<div class="error-card">
-				<div class="error-icon">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="48"
-						height="48"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><path
-							d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
-						/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
-					>
-				</div>
-				<h3>Playback Error</h3>
-				<p>{errorMessage}</p>
-				<button class="retry-btn" on:click={() => loadVideo(currentLoadedUrl, currentLoadedReferer)}>
-					Try Again
-				</button>
-			</div>
-		</div>
+		<ErrorOverlay {errorMessage} onRetry={() => loadVideo(currentLoadedUrl, currentLoadedReferer)} />
 	{/if}
 
 	<div class="controls-overlay {showControls || !isPlaying ? 'visible' : ''}">
@@ -582,142 +498,6 @@
 			height: 100%;
 			object-fit: contain;
 			aspect-ratio: 16/9;
-		}
-		.no-video-overlay {
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background: #0f1115;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			z-index: 5;
-			color: #b9bbbe;
-			text-align: center;
-			padding: 2rem;
-
-			.no-video-icon {
-				color: $primary;
-				margin-bottom: 1.5rem;
-				opacity: 0.6;
-			}
-
-			h3 {
-				color: white;
-				margin: 0 0 0.5rem 0;
-				font-size: 1.5rem;
-			}
-
-			p {
-				max-width: 300px;
-				line-height: 1.4;
-			}
-		}
-		.loading-overlay {
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background: rgba(0, 0, 0, 0.7);
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			z-index: 10;
-			pointer-events: none;
-			color: white;
-
-			.spinner {
-				width: 48px;
-				height: 48px;
-				border: 4px solid rgba(255, 255, 255, 0.1);
-				border-top-color: $primary;
-				border-radius: 50%;
-				animation: spin 0.8s linear infinite;
-				margin-bottom: 1.25rem;
-				filter: drop-shadow(0 0 10px rgba($primary, 0.4));
-			}
-
-			p {
-				font-size: 1.1rem;
-				font-weight: 600;
-				letter-spacing: 0.5px;
-				text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-			}
-		}
-		.error-overlay {
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background: rgba(0, 0, 0, 0.7);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			z-index: 20;
-			padding: 2rem;
-
-			.error-card {
-				background: rgba(24, 27, 33, 0.95);
-				border: 1px solid rgba(255, 255, 255, 0.1);
-				border-radius: 20px;
-				padding: 2.5rem;
-				width: 100%;
-				max-width: 360px;
-				text-align: center;
-				box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-				animation: fadeInScale 0.3s ease-out;
-
-				.error-icon {
-					color: #ff6b6b;
-					margin-bottom: 1.25rem;
-					display: flex;
-					justify-content: center;
-					filter: drop-shadow(0 0 10px rgba(#ff6b6b, 0.3));
-				}
-
-				h3 {
-					color: white;
-					margin: 0 0 0.5rem 0;
-					font-size: 1.5rem;
-					font-weight: 700;
-				}
-
-				p {
-					color: #b9bbbe;
-					margin: 0 0 2rem 0;
-					font-size: 1rem;
-					line-height: 1.5;
-				}
-
-				.retry-btn {
-					background: $primary;
-					color: white;
-					border: none;
-					padding: 0.8rem 1.5rem;
-					border-radius: 10px;
-					font-size: 1rem;
-					font-weight: 700;
-					cursor: pointer;
-					transition: all 0.2s;
-					width: 100%;
-
-					&:hover {
-						background: lighten($primary, 5%);
-						transform: translateY(-2px);
-						box-shadow: 0 8px 20px rgba($primary, 0.4);
-					}
-
-					&:active {
-						transform: translateY(0);
-					}
-				}
-			}
 		}
 		.controls-overlay {
 			position: absolute;
@@ -794,24 +574,6 @@
 					pointer-events: none;
 				}
 			}
-		}
-	}
-	@keyframes spin {
-		0% {
-			transform: rotate(0deg);
-		}
-		100% {
-			transform: rotate(360deg);
-		}
-	}
-	@keyframes fadeInScale {
-		from {
-			opacity: 0;
-			transform: scale(0.9);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
 		}
 	}
 </style>
