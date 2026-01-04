@@ -453,28 +453,7 @@
 		on:error={handleVideoError}
 	></video>
 
-	{#if !$roomState.videoUrl}
-		<div class="no-video-overlay" transition:fade={{ duration: 200 }}>
-			<div class="no-video-icon">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="64"
-					height="64"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" /><path
-						d="M12 7v5l3 3"
-					/></svg
-				>
-			</div>
-			<h3>No video selected</h3>
-			<p>Enter a URL in the bar below to start watching together</p>
-		</div>
-	{:else if $isWaitingForOthers || localIsBuffering || $isVideoChanging}
+	{#if $isVideoChanging || ($roomState.videoUrl && (localIsBuffering || $isWaitingForOthers))}
 		<div class="loading-overlay" transition:fade={{ duration: 200 }}>
 			<div class="spinner"></div>
 			<p>
@@ -486,6 +465,14 @@
 					Waiting for others...
 				{/if}
 			</p>
+		</div>
+	{:else if !$roomState.videoUrl}
+		<div class="no-video-overlay" transition:fade={{ duration: 200 }}>
+			<div class="no-video-icon">
+				<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 7v5l3 3"/></svg>
+			</div>
+			<h3>No video selected</h3>
+			<p>Enter a URL in the bar below to start watching together</p>
 		</div>
 	{/if}
 
