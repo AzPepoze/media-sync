@@ -5,20 +5,31 @@ import { resolveVideoUrl } from "../utils/ytdlp";
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
 		if (rooms[roomId]) {
+			console.log(`[Player] Request to set URL in room ${roomId}: ${url}`);
+
 			// Notify everyone immediately that we are processing
 			io.to(roomId).emit("video_changing");
 
-			const resolved = await resolveVideoUrl(url);
-			rooms[roomId].videoUrl = resolved.url;
-			
-			// Use only resolved referer or user-provided referer.
-			const finalReferer = resolved.referer || referer;
-			rooms[roomId].referer = (finalReferer && finalReferer.trim() !== "") ? finalReferer : null;
-			
-			rooms[roomId].currentTime = 0;
-			rooms[roomId].isPlaying = true;
-			rooms[roomId].lastUpdated = Date.now();
-			io.to(roomId).emit("sync_state", rooms[roomId]);
+			try {
+				const resolved = await resolveVideoUrl(url);
+
+				// Update room state only with the resolved direct URL
+				rooms[roomId].videoUrl = resolved.url;
+
+				// Use only resolved referer or user-provided referer.
+				const finalReferer = resolved.referer || referer;
+				rooms[roomId].referer = finalReferer && finalReferer.trim() !== "" ? finalReferer : null;
+
+				rooms[roomId].currentTime = 0;
+				rooms[roomId].isPlaying = true;
+				rooms[roomId].lastUpdated = Date.now();
+
+				console.log(`[Player] URL resolved successfully for room ${roomId}`);
+				io.to(roomId).emit("sync_state", rooms[roomId]);
+			} catch (error) {
+				console.error(`[Player] Failed to resolve URL for room ${roomId}:`, error);
+				io.to(roomId).emit("room_error", "Failed to resolve video URL. Please try another link.");
+			}
 		}
 	});
 
@@ -43,7 +54,6 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 		if (rooms[roomId]) {
 			rooms[roomId].currentTime = time;
 			rooms[roomId].lastUpdated = Date.now();
-			// Broadcast to everyone including sender to ensure sync
 			io.to(roomId).emit("player_action", { action: "seek", time });
 		}
 	});
@@ -68,7 +78,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 				const elapsed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
 				syncTime += elapsed;
 			}
-			
+
 			// Update server state to this new point
 			rooms[roomId].currentTime = syncTime;
 			rooms[roomId].lastUpdated = Date.now();
@@ -90,6 +100,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("time_update", ({ roomId, time }: { roomId: string; time: number }) => {
 		if (rooms[roomId] && rooms[roomId].isPlaying) {
 			rooms[roomId].currentTime = time;
+			rooms[roomId].lastUpdated = Date.now();
 		}
 	});
 };

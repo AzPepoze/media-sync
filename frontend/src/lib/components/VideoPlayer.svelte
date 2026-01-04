@@ -61,6 +61,19 @@
 
 	function loadCurrentVideo() {
 		if (!$roomState?.videoUrl) return;
+
+		// Check if it's a direct media link (ends with extension or contains common stream keywords)
+		const isDirectLink =
+			isHlsSource($roomState.videoUrl) ||
+			$roomState.videoUrl.match(/\.(mp4|webm|mkv|mov|avi|flv)(\?|$)/i) ||
+			$roomState.videoUrl.includes("googlevideo.com") ||
+			$roomState.videoUrl.includes("/proxy?url="); // Already proxied or direct
+
+		if (!isDirectLink) {
+			console.log("[Player] URL is not a direct media link yet, skipping load.");
+			return;
+		}
+
 		const stateReferer = $roomState.referer || "";
 
 		let targetTime = $roomState.currentTime;
