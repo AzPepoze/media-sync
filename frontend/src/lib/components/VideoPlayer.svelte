@@ -5,6 +5,7 @@
 		roomState,
 		isWaitingForOthers,
 		isVideoChanging,
+		roomError,
 		emitAction,
 		currentRoomId,
 	} from "../stores/socket";
@@ -461,8 +462,15 @@
 		<NoVideoOverlay />
 	{/if}
 
-	{#if hasError}
-		<ErrorOverlay {errorMessage} onRetry={() => loadVideo(currentLoadedUrl, currentLoadedReferer)} />
+	{#if hasError || $roomError}
+		<ErrorOverlay 
+			errorMessage={errorMessage || $roomError || ""} 
+			onRetry={() => {
+				roomError.set(null);
+				hasError = false;
+				loadVideo(currentLoadedUrl, currentLoadedReferer);
+			}} 
+		/>
 	{/if}
 
 	<div class="controls-overlay {showControls || !isPlaying ? 'visible' : ''}">

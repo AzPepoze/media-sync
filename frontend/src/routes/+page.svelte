@@ -44,18 +44,6 @@
 {#if !$isJoined}
 	<WelcomeScreen />
 {:else}
-	{#if $roomError}
-		<div class="global-error-toast" transition:fade>
-			<svg viewBox="0 0 24 24" width="20" height="20">
-				<path
-					fill="currentColor"
-					d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"
-				/>
-			</svg>
-			<span>{$roomError}</span>
-		</div>
-	{/if}
-
 	<div class="app-layout">
 		<div class="player-area">
 			<div class="mobile-header">
@@ -338,23 +326,5 @@
 	.sidebar-content {
 		flex: 1;
 		overflow: hidden;
-	}
-
-	.global-error-toast {
-		position: fixed;
-		top: 20px;
-		left: 50%;
-		transform: translateX(-50%);
-		background: #ed4245;
-		color: white;
-		padding: 0.8rem 1.2rem;
-		border-radius: 8px;
-		display: flex;
-		align-items: center;
-		gap: 0.8rem;
-		z-index: 9999;
-		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-		font-weight: 600;
-		max-width: 90vw;
 	}
 </style>

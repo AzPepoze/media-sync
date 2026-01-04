@@ -40,6 +40,7 @@ export const resolveVideoUrl = async (url: string): Promise<ResolvedMedia> => {
 async function tryNormalStrategy(url: string): Promise<ResolvedMedia | null> {
 	try {
 		const { stdout } = await execAsync(`yt-dlp -g --no-check-certificates --no-warnings "${url}"`);
+		console.log(`[YTDLP] Normal Strategy Output: ${stdout}`);
 		const resolvedUrl = stdout.trim().split("\n")[0];
 		if (resolvedUrl && resolvedUrl.startsWith("http")) {
 			return { url: resolvedUrl };
@@ -55,6 +56,9 @@ async function tryAdvancedStrategy(url: string): Promise<ResolvedMedia | null> {
 	try {
 		const cmd = `yt-dlp --dump-single-json --impersonate "chrome" --extractor-args "generic:impersonate" --no-check-certificates --no-warnings "${url}"`;
 		const { stdout } = await execAsync(cmd);
+
+		console.log(`[YTDLP] Advanced Strategy Output: ${stdout}`);
+
 		const info = JSON.parse(stdout);
 
 		if (info && info.url) {
