@@ -21,6 +21,11 @@
 		const roomParam = params.get("room_id");
 		if (roomParam) roomId = roomParam;
 
+		// Auto join if both exist
+		if (nickname && roomId) {
+			handleJoin();
+		}
+
 		fetchRandomBackground();
 	});
 

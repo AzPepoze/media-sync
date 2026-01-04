@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
-	import { isJoined, initSocket, cleanupSocket, currentRoomId } from "$lib/stores/socket";
+	import { isJoined, initSocket, cleanupSocket, currentRoomId, leaveRoom } from "$lib/stores/socket";
 	import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
 	import VideoPlayer from "$lib/components/VideoPlayer.svelte";
 	import UserList from "$lib/components/UserList.svelte";
@@ -19,8 +19,7 @@
 	});
 
 	function goHome() {
-		isJoined.set(false);
-		window.history.pushState({}, "", "/");
+		leaveRoom();
 	}
 
 	function toggleSidebar() {

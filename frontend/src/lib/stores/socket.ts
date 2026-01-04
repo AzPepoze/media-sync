@@ -31,18 +31,27 @@ export function initSocket() {
 	socketInstance.on("connect", () => {
 		console.log("Connected:", socketInstance.id);
 		isConnected.set(true);
+
+		// Auto re-join if we have the info
+		const savedRoomId = localStorage.getItem("roomId");
+		const savedNickname = localStorage.getItem("nickname");
+		if (savedRoomId && savedNickname) {
+			console.log("Auto-rejoining room:", savedRoomId);
+			socketInstance.emit("join_room", { roomId: savedRoomId, nickname: savedNickname });
+			isJoined.set(true);
+			currentRoomId.set(savedRoomId);
+		}
 	});
 
-	socketInstance.on("disconnect", () => {
-		console.log("Disconnected");
+	socketInstance.on("disconnect", (reason) => {
+		console.log("Disconnected:", reason);
 		isConnected.set(false);
-		isJoined.set(false);
 	});
 
 	socketInstance.on("sync_state", (state: RoomState) => {
 		console.log("Sync state received:", state.videoUrl);
 		roomState.set(state);
-		isVideoChanging.set(false); // Reset when new video state arrives
+		isVideoChanging.set(false);
 	});
 
 	socketInstance.on("video_changing", () => {
@@ -66,14 +75,13 @@ export function initSocket() {
 			lastUpdated: Date.now(),
 		}));
 	});
-
-	// Note: 'player_action' is handled directly in VideoPlayer to avoid store latency
 }
 
 export function joinRoom(roomId: string, nickname: string) {
 	if (!socketInstance) initSocket();
 	socketInstance.emit("join_room", { roomId, nickname });
 	localStorage.setItem("nickname", nickname);
+	localStorage.setItem("roomId", roomId);
 	currentRoomId.set(roomId);
 	isJoined.set(true);
 
@@ -81,6 +89,13 @@ export function joinRoom(roomId: string, nickname: string) {
 	const url = new URL(window.location.href);
 	url.searchParams.set("room_id", roomId);
 	window.history.pushState({}, "", url.toString());
+}
+
+export function leaveRoom() {
+	isJoined.set(false);
+	currentRoomId.set("");
+	localStorage.removeItem("roomId");
+	window.history.pushState({}, "", "/");
 }
 
 export function setUrl(roomId: string, url: string, referer: string) {

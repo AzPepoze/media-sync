@@ -26,18 +26,35 @@
 			isVideoChanging.set(true); // Instant feedback locally
 			setUrl($currentRoomId, inputUrl, refererUrl);
 			// Security fallback: if backend fails to respond, reset loading after 15s
-			setTimeout(() => { isLoading = false; isVideoChanging.set(false); }, 15000);
+			setTimeout(() => {
+				isLoading = false;
+				isVideoChanging.set(false);
+			}, 15000);
 		}
+	}
+
+	function handleClear() {
+		inputUrl = "";
+		refererUrl = "";
 	}
 </script>
 
 <div class="url-control-panel">
 	<div class="input-row">
-		<input type="text" bind:value={inputUrl} placeholder="Video URL (mp4 / .m3u8 / .txt)" />
-		<input type="text" bind:value={refererUrl} placeholder="Referer URL (Optional)" />
-		<button class="load-btn" on:click={handleLoad} disabled={isLoading}>
-			{isLoading ? "Loading..." : "Load"}
-		</button>
+		<div class="inputs-group">
+			<input
+				type="text"
+				bind:value={inputUrl}
+				placeholder="Video URL (youtube link / .m3u8 / .txt / any other playable media)"
+			/>
+			<input type="text" bind:value={refererUrl} placeholder="Referer URL (Optional)" />
+		</div>
+		<div class="actions-group">
+			<button class="clear-btn" on:click={handleClear} title="Clear inputs"> Clear </button>
+			<button class="load-btn" on:click={handleLoad} disabled={isLoading}>
+				{isLoading ? "Loading..." : "Load"}
+			</button>
+		</div>
 	</div>
 </div>
 
@@ -60,28 +77,79 @@
 				flex-direction: column;
 			}
 
-			input {
+			.inputs-group {
+				display: flex;
 				flex: 1;
-				padding: 0.8rem;
-				background: #0f1115;
-				border: 1px solid #333;
-				color: white;
-				border-radius: 6px;
-				&:focus {
-					border-color: $primary;
-					outline: none;
+				gap: 10px;
+
+				@media (max-width: 768px) {
+					flex-direction: column;
+				}
+
+				input {
+					flex: 1;
+					padding: 0.8rem;
+					background: #0f1115;
+					border: 1px solid #333;
+					color: white;
+					border-radius: 6px;
+					font-size: 0.9rem;
+					&:focus {
+						border-color: $primary;
+						outline: none;
+					}
 				}
 			}
-			.load-btn {
-				padding: 0 1.5rem;
-				background: $primary;
-				color: white;
-				border: none;
-				border-radius: 6px;
-				font-weight: bold;
-				cursor: pointer;
-				&:hover {
-					filter: brightness(1.1);
+
+			.actions-group {
+				display: flex;
+				gap: 10px;
+
+				@media (max-width: 768px) {
+					width: 100%;
+				}
+
+				button {
+					padding: 0.8rem 1.5rem;
+					border: none;
+					border-radius: 6px;
+					font-weight: bold;
+					cursor: pointer;
+					transition: all 0.2s;
+					font-size: 1rem;
+
+					@media (max-width: 768px) {
+						flex: 1;
+						padding: 1rem;
+						min-height: 50px;
+					}
+
+					&:hover {
+						filter: brightness(1.1);
+					}
+
+					&:active {
+						transform: scale(0.98);
+					}
+				}
+
+				.clear-btn {
+					background: #2f3136;
+					color: #dcddde;
+					&:hover {
+						background: #4f545c;
+						color: white;
+					}
+				}
+
+				.load-btn {
+					background: $primary;
+					color: white;
+					min-width: 100px;
+					&:disabled {
+						opacity: 0.5;
+						cursor: not-allowed;
+					}
 				}
 			}
 		}
