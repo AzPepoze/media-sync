@@ -41,7 +41,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 			rooms[roomId].isPlaying = true;
 			rooms[roomId].currentTime = time;
 			rooms[roomId].lastUpdated = Date.now();
-			socket.to(roomId).emit("player_action", { action: "play", time });
+			io.to(roomId).emit("player_action", { action: "play", time });
 		}
 	});
 
@@ -49,7 +49,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 		if (rooms[roomId]) {
 			rooms[roomId].isPlaying = false;
 			rooms[roomId].currentTime = time;
-			socket.to(roomId).emit("player_action", { action: "pause", time });
+			io.to(roomId).emit("player_action", { action: "pause", time });
 		}
 	});
 
