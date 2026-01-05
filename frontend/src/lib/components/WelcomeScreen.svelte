@@ -82,79 +82,126 @@
 	}
 </script>
 
-<div class="login-container">
-	<!-- Fullscreen Background Layer -->
-	<div
-		class="background-layer"
-		class:visible={isBgReady}
-		style={backgroundUrl ? `background-image: url('${backgroundUrl}');` : ""}
-	></div>
+<div class="welcome-wrapper">
+	<div class="login-container">
+		<!-- Fullscreen Background Layer -->
+		<div
+			class="background-layer"
+			class:visible={isBgReady}
+			style={backgroundUrl ? `background-image: url('${backgroundUrl}');` : ""}
+		></div>
 
-	<!-- Left Side: Brand -->
-	<div class="brand-section">
-		<div class="brand-content">
-			<img src="/logo.png" alt="Media Sync Logo" class="brand-logo" />
-			<h1>Media Sync</h1>
-			<p class="tagline">Watch videos together with friends in real-time.</p>
+		<div class="hero-content">
+			<!-- Left Side: Brand -->
+			<div class="brand-section">
+				<div class="brand-content">
+					<img src="/logo.png" alt="Media Sync Logo" class="brand-logo" />
+					<h1>Media Sync</h1>
+					<p class="tagline">Watch videos together with friends in real-time.</p>
+				</div>
+			</div>
+
+			<!-- Right Side: Floating Form Card -->
+			<div class="form-section">
+				<div class="form-card">
+					<h2>Welcome</h2>
+					<p class="subtitle">Enter your name and room ID to start watching together</p>
+
+					<div class="input-group">
+						<label for="nick">Nickname</label>
+						<input
+							id="nick"
+							type="text"
+							bind:value={nickname}
+							placeholder="Enter your nickname"
+							on:keydown={handleKeydown}
+						/>
+					</div>
+
+					<div class="input-group">
+						<label for="room">Room ID</label>
+						<div class="room-input-wrapper">
+							<input
+								id="room"
+								type="text"
+								bind:value={roomId}
+								placeholder="Custom ID or leave blank for random"
+								on:keydown={handleKeydown}
+							/>
+							<button class="random-btn" on:click={generateRandomId} title="Generate random ID"> 🎲 </button>
+						</div>
+					</div>
+
+					<div class="actions">
+						<button class="join-btn" on:click={handleJoin} disabled={!nickname}>
+							{roomId ? "Join / Create Room" : "Create Random Room"}
+						</button>
+					</div>
+				</div>
+			</div>
 		</div>
+
+		<div class="scroll-hint">
+			<span>About this project</span>
+			<div class="arrow">↓</div>
+		</div>
+
+		<!-- Credits & Loading UI -->
+		{#if backgroundUrl || isBgLoading}
+			<div class="bg-credits" class:loading={isBgLoading}>
+				{#if isBgLoading}
+					<div class="loading-state">
+						<div class="spinner"></div>
+						<span>Loading background...</span>
+					</div>
+				{:else}
+					<div class="credit-row">
+						<span class="source">Random background by Konachan</span>
+						<button class="refresh-btn" on:click={fetchRandomBackground} title="Next Image">↻</button>
+					</div>
+					<a href={backgroundFileUrl} target="_blank" class="download-link">Download background</a>
+				{/if}
+			</div>
+		{/if}
 	</div>
 
-	<!-- Right Side: Floating Form Card -->
-	<div class="form-section">
-		<div class="form-card">
-			<h2>Welcome</h2>
-			<p class="subtitle">Enter your name and room ID to start watching together</p>
-
-			<div class="input-group">
-				<label for="nick">Nickname</label>
-				<input
-					id="nick"
-					type="text"
-					bind:value={nickname}
-					placeholder="Enter your nickname"
-					on:keydown={handleKeydown}
-				/>
-			</div>
-
-			<div class="input-group">
-				<label for="room">Room ID</label>
-				<div class="room-input-wrapper">
-					<input
-						id="room"
-						type="text"
-						bind:value={roomId}
-						placeholder="Custom ID or leave blank for random"
-						on:keydown={handleKeydown}
-					/>
-					<button class="random-btn" on:click={generateRandomId} title="Generate random ID"> 🎲 </button>
+	<div class="about-section">
+		<div class="about-container">
+			<div class="about-grid">
+				<div class="about-card">
+					<div class="icon">🚀</div>
+					<h3>Real-time Sync</h3>
+					<p>Experience seamless video playback with friends. Pause, seek, and play are synchronized instantly for everyone in the room.</p>
+				</div>
+				<div class="about-card">
+					<div class="icon">📺</div>
+					<h3>Multi-source Support</h3>
+					<p>Support for various video sources including YouTube, direct video links, and more through our powerful backend proxy.</p>
+				</div>
+				<div class="about-card">
+					<div class="icon">💬</div>
+					<h3>Private Rooms</h3>
+					<p>Create your own private space. Just share the Room ID with your friends and start your watch party in seconds.</p>
 				</div>
 			</div>
 
-			<div class="actions">
-				<button class="join-btn" on:click={handleJoin} disabled={!nickname}>
-					{roomId ? "Join / Create Room" : "Create Random Room"}
-				</button>
+			<div class="project-info">
+				<h2>About Media Sync</h2>
+				<p>
+					Media Sync is an open-source project designed to bring people together through shared media experiences. 
+					Built with modern technologies like SvelteKit, Socket.io, and Node.js, it provides a lightweight 
+					and responsive interface for synchronized video watching.
+				</p>
+				<div class="tech-stack">
+					<span>SvelteKit</span>
+					<span>TypeScript</span>
+					<span>Socket.io</span>
+					<span>Node.js</span>
+					<span>FastAPI (YTDLP)</span>
+				</div>
 			</div>
 		</div>
 	</div>
-
-	<!-- Credits & Loading UI -->
-	{#if backgroundUrl || isBgLoading}
-		<div class="bg-credits" class:loading={isBgLoading}>
-			{#if isBgLoading}
-				<div class="loading-state">
-					<div class="spinner"></div>
-					<span>Loading background...</span>
-				</div>
-			{:else}
-				<div class="credit-row">
-					<span class="source">Random background by Konachan</span>
-					<button class="refresh-btn" on:click={fetchRandomBackground} title="Next Image">↻</button>
-				</div>
-				<a href={backgroundFileUrl} target="_blank" class="download-link">Download background</a>
-			{/if}
-		</div>
-	{/if}
 </div>
 
 <style lang="scss">
@@ -169,12 +216,20 @@
 	$input-bg: #202225;
 	$border-color: #2f3136;
 
+	.welcome-wrapper {
+		height: 100vh;
+		height: 100dvh;
+		overflow-y: auto;
+		scroll-behavior: smooth;
+		background-color: $bg-dark;
+	}
+
 	.login-container {
 		display: flex;
-		height: 100vh; /* Fallback */
+		flex-direction: column;
+		height: 100vh;
 		height: 100dvh;
-		width: 100vw;
-		background-color: $bg-dark;
+		width: 100%;
 		overflow: hidden;
 		position: relative;
 
@@ -202,10 +257,17 @@
 			left: 0;
 			width: 100%;
 			height: 100%;
-			background: rgba(0, 0, 0, 0.25);
+			background: rgba(0, 0, 0, 0.35);
 			z-index: 0;
 			pointer-events: none;
 		}
+	}
+
+	.hero-content {
+		flex: 1;
+		display: flex;
+		width: 100%;
+		z-index: 1;
 
 		@media (max-width: 768px) {
 			flex-direction: column;
@@ -219,7 +281,6 @@
 		justify-content: center;
 		align-items: center;
 		position: relative;
-		z-index: 1;
 
 		@media (max-width: 768px) {
 			display: none;
@@ -262,15 +323,13 @@
 		justify-content: center;
 		align-items: center;
 		padding: 2rem;
-		z-index: 1;
-		background: transparent; // Transparent container
+		background: transparent;
 
 		.form-card {
 			width: 100%;
 			max-width: 420px;
 			padding: 2.5rem;
-			// Floating Glassmorphism Card
-			background: rgba(24, 27, 33, 0.8);
+			background: rgba(24, 27, 33, 0.85);
 			backdrop-filter: blur(20px);
 			-webkit-backdrop-filter: blur(20px);
 			border: 1px solid rgba(255, 255, 255, 0.1);
@@ -366,6 +425,29 @@
 		}
 	}
 
+	.scroll-hint {
+		position: absolute;
+		bottom: 2rem;
+		left: 50%;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		color: white;
+		z-index: 1;
+		opacity: 0.7;
+		font-size: 0.9rem;
+		font-weight: 600;
+		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+		pointer-events: none;
+		animation: bounce 2s infinite;
+
+		.arrow {
+			font-size: 1.5rem;
+			margin-top: 0.2rem;
+		}
+	}
+
 	.bg-credits {
 		position: absolute;
 		bottom: 1rem;
@@ -406,8 +488,9 @@
 			cursor: pointer;
 			font-size: 1rem;
 			opacity: 0.8;
+			transition: transform 0.3s;
 			&:hover {
-				transform: rotate(30deg);
+				transform: rotate(180deg);
 				opacity: 1;
 			}
 		}
@@ -421,18 +504,138 @@
 		}
 	}
 
+	.about-section {
+		background-color: $bg-dark;
+		padding: 6rem 2rem;
+		position: relative;
+		z-index: 2;
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
+
+		.about-container {
+			max-width: 1000px;
+			margin: 0 auto;
+		}
+
+		.about-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+			gap: 2rem;
+			margin-bottom: 5rem;
+		}
+
+		.about-card {
+			background: $bg-panel;
+			padding: 2.5rem;
+			border-radius: 20px;
+			border: 1px solid rgba(255, 255, 255, 0.05);
+			transition: transform 0.3s, border-color 0.3s;
+
+			&:hover {
+				transform: translateY(-5px);
+				border-color: rgba($primary, 0.3);
+			}
+
+			.icon {
+				font-size: 2.5rem;
+				margin-bottom: 1.5rem;
+			}
+
+			h3 {
+				font-size: 1.5rem;
+				color: white;
+				margin-bottom: 1rem;
+			}
+
+			p {
+				color: $text-muted;
+				line-height: 1.6;
+			}
+		}
+
+		.project-info {
+			text-align: center;
+			background: linear-gradient(145deg, rgba($primary, 0.1), transparent);
+			padding: 4rem;
+			border-radius: 30px;
+			border: 1px solid rgba($primary, 0.1);
+
+			h2 {
+				font-size: 2.5rem;
+				color: white;
+				margin-bottom: 1.5rem;
+			}
+
+			p {
+				color: $text-muted;
+				font-size: 1.1rem;
+				line-height: 1.8;
+				max-width: 800px;
+				margin: 0 auto 2.5rem;
+			}
+
+			.tech-stack {
+				display: flex;
+				flex-wrap: wrap;
+				justify-content: center;
+				gap: 1rem;
+
+				span {
+					background: rgba(255, 255, 255, 0.05);
+					color: white;
+					padding: 0.5rem 1.2rem;
+					border-radius: 100px;
+					font-size: 0.9rem;
+					font-weight: 600;
+					border: 1px solid rgba(255, 255, 255, 0.1);
+				}
+			}
+		}
+	}
+
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
 		}
 	}
+
+	@keyframes bounce {
+		0%, 20%, 50%, 80%, 100% {
+			transform: translateX(-50%) translateY(0);
+		}
+		40% {
+			transform: translateX(-50%) translateY(-10px);
+		}
+		60% {
+			transform: translateX(-50%) translateY(-5px);
+		}
+	}
+
 	@media (max-width: 768px) {
 		.brand-section {
+			display: flex;
 			flex: 0 0 auto;
-			padding: 2rem 0;
+			padding: 3rem 0 1rem;
+			
+			h1 {
+				font-size: 2.5rem;
+			}
+			.brand-logo {
+				width: 100px;
+			}
+			.tagline {
+				display: none;
+			}
 		}
 		.form-section {
 			padding: 1rem;
+		}
+		.about-section {
+			padding: 4rem 1.5rem;
+			
+			.project-info {
+				padding: 2rem 1rem;
+				h2 { font-size: 1.8rem; }
+			}
 		}
 	}
 </style>
