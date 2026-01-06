@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://media-sync.com/sitemap.xml
+Sitemap: https://media-sync.azpepoze.com/sitemap.xml
