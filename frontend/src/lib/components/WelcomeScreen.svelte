@@ -9,7 +9,7 @@
 	let backgroundUrl = "";
 	let backgroundPostId = "";
 	let backgroundAuthor = "";
-	let backgroundFileUrl = "";
+	let backgroundSource = "";
 	let isBgLoading = false;
 	let isBgReady = false;
 
@@ -42,9 +42,9 @@
 					isBgReady = false;
 					setTimeout(() => {
 						backgroundUrl = imgUrl;
-						backgroundFileUrl = post.file_url;
 						backgroundPostId = post.id;
 						backgroundAuthor = post.author;
+						backgroundSource = post.source;
 						isBgReady = true;
 						isBgLoading = false;
 					}, 100);
@@ -159,7 +159,7 @@
 						<span class="source">Random background by Konachan</span>
 						<button class="refresh-btn" on:click={fetchRandomBackground} title="Next Image">↻</button>
 					</div>
-					<a href={backgroundFileUrl} target="_blank" class="download-link">Download background</a>
+					<a href={backgroundSource} target="_blank" class="download-link">Go to source</a>
 				{/if}
 			</div>
 		{/if}
