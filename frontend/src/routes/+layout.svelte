@@ -1,7 +1,3 @@
-<svelte:head>
-	<title>Media Sync - Watch Videos Together Online</title>
-</svelte:head>
-
 <slot />
 
 <style>
