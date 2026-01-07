@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { rooms, roomUsers } from "../store";
-import { resolveVideoUrl } from "../utils/ytdlp";
+import { resolveVideoUrl } from "../utils/getVideoUrl";
 
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
