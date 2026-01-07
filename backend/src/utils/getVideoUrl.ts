@@ -147,7 +147,7 @@ async function sniffVideoUrl(url: string): Promise<ResolvedMedia | null> {
 
 		if (foundUrl) {
 			console.log(`[Sniff] Found Video Source: ${foundUrl}`);
-			return { url: foundUrl, referer: url };
+			return { url: foundUrl, referer: undefined };
 		}
 	} catch (e: any) {
 		console.error(`[Sniff] Strategy Error: ${e.message}`);
