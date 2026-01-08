@@ -50,7 +50,6 @@
 	const MAX_RETRIES = 2;
 
 	// UI State
-	let isPlaying = false;
 	let currentTime = 0;
 	let duration = 0;
 	let buffered = 0;
@@ -109,16 +108,16 @@
 			}
 
 			// Play/Pause State Sync
-			const shouldBePlaying = $roomState.isPlaying;
-			const isActuallyPlaying = isPlaying; // Trust internal state over DOM sometimes
+			const shouldBePlaying = $roomState.isPlaying && !$isWaitingForOthers;
+			const isActuallyPlaying = player.isPlaying;
 
-			// Only intervene if there is a mismatch AND we are not buffering/waiting
-			if (shouldBePlaying && !isActuallyPlaying && !$isWaitingForOthers && !localIsBuffering) {
+			// Only intervene if there is a mismatch AND we are not buffering locally
+			if (shouldBePlaying && !isActuallyPlaying && !localIsBuffering) {
+				console.log("[Sync] Resuming playback");
 				player.play();
-				isPlaying = true;
 			} else if (!shouldBePlaying && isActuallyPlaying) {
+				console.log("[Sync] Pausing playback (waiting or paused)");
 				player.pause();
-				isPlaying = false;
 			}
 		}
 	}
@@ -133,7 +132,6 @@
 		errorMessage = "";
 		currentTime = startTime;
 		buffered = 0;
-		isPlaying = shouldPlay;
 		retryCount = 0;
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
@@ -155,6 +153,10 @@
 
 			if (!player && ytComponent) {
 				player = new YouTubePlayer(ytComponent);
+				player.setPlayingChangeCallback(() => {
+					// Force reactivity update
+					player = player;
+				});
 			}
 		} else {
 			isYoutube = false;
@@ -175,6 +177,10 @@
 						}
 					},
 				});
+				player.setPlayingChangeCallback(() => {
+					// Force reactivity update
+					player = player;
+				});
 			}
 
 			// Load Content
@@ -189,10 +195,20 @@
 	//-------------------------------------------------------
 	$: if ($roomState) loadCurrentVideo();
 
+	// React to waiting state changes
+	$: if (player && player.isReady) {
+		if ($isWaitingForOthers && player.isPlaying) {
+			console.log("[Sync] Others buffering, pausing playback");
+			player.pause();
+		} else if (!$isWaitingForOthers && !localIsBuffering && $roomState.isPlaying && !player.isPlaying) {
+			console.log("[Sync] Others ready, resuming playback");
+			player.play();
+		}
+	}
+
 	$: if ($socket) {
 		$socket.off("connect");
 		$socket.off("player_action");
-		$socket.off("room_buffering");
 
 		$socket.on("connect", () => {
 			console.log("[Player] Socket connected, re-syncing...");
@@ -225,31 +241,9 @@
 			}
 
 			if (data.action === "play") {
-				isPlaying = true;
 				player.play();
 			} else if (data.action === "pause") {
-				isPlaying = false;
 				player.pause();
-			}
-		});
-
-		$socket.on("room_buffering", (isBuffering: boolean) => {
-			if (!player) return;
-
-			console.log("[Player] Room buffering status:", isBuffering, "Room playing:", $roomState.isPlaying);
-
-			if (isBuffering) {
-				if (isPlaying) {
-					player.pause();
-					isPlaying = false;
-				}
-			} else if ($roomState.isPlaying && !localIsBuffering) {
-				console.log("[Player] Room buffering ended, resuming playback.");
-				// Resume if room is playing and we aren't the one buffering
-				if (!isPlaying) {
-					player.play();
-					isPlaying = true;
-				}
 			}
 		});
 	}
@@ -262,6 +256,10 @@
 		console.log("[Youtube] Ready");
 		if (!player && ytComponent) {
 			player = new YouTubePlayer(ytComponent);
+			player.setPlayingChangeCallback(() => {
+				// Force reactivity update
+				player = player;
+			});
 		}
 		isVideoChanging.set(false);
 		duration = e.detail.duration;
@@ -292,19 +290,16 @@
 			console.log("[Youtube] Recovered from Buffering -> Playing");
 
 			localIsBuffering = false;
-			// emitAction("buffering_end", $currentRoomId);
 
 			if ($roomState.isPlaying) {
 				console.log("[Youtube] Auto-resume detected. Suppressing 'play' emit.");
-				if (!isPlaying) isPlaying = true;
 				return;
 			}
 		}
 
-		if (isPlaying) return;
-		isPlaying = true;
+		if (player && player.isPlaying) return;
 
-		// 3. Emit Play Action
+		// Emit Play Action
 		// Only if not waiting for others, not currently waiting for buffer, etc.
 		if (!isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
 			const t = player ? player.getCurrentTime() : 0;
@@ -315,8 +310,7 @@
 	function onPause() {
 		console.log("[Player] onPause triggered");
 
-		if (!isPlaying) return;
-		isPlaying = false;
+		if (player && !player.isPlaying) return;
 
 		if (!isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
 			const t = player ? player.getCurrentTime() : 0;
@@ -349,7 +343,7 @@
 
 	function onPlaying() {
 		console.log("[Player] onPlaying triggered");
-		if (!localIsBuffering) {
+		if (localIsBuffering) {
 			console.log("[Player] Buffering ended (onPlaying)...");
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
@@ -399,7 +393,7 @@
 	//-------------------------------------------------------
 	function togglePlay() {
 		if (player) {
-			isPlaying ? player.pause() : player.play();
+			player.isPlaying ? player.pause() : player.play();
 		}
 	}
 
@@ -482,7 +476,7 @@
 		showControls = true;
 		hideCursor = false;
 		clearTimeout(controlsTimeout);
-		if (isPlaying && !isHoveringSeek) {
+		if (player?.isPlaying && !isHoveringSeek) {
 			controlsTimeout = setTimeout(() => {
 				showControls = false;
 				hideCursor = true;
@@ -579,7 +573,10 @@
 	></video>
 
 	{#if $isVideoChanging || ($roomState?.videoUrl && (localIsBuffering || $isWaitingForOthers))}
-		<LoadingOverlay isVideoChanging={$isVideoChanging} {localIsBuffering} />
+		<LoadingOverlay
+			isVideoChanging={$isVideoChanging}
+			localIsBuffering={localIsBuffering && !$isWaitingForOthers}
+		/>
 	{:else if !$roomState?.videoUrl}
 		<NoVideoOverlay />
 	{/if}
@@ -602,7 +599,7 @@
 		/>
 	{/if}
 
-	<div class="controls-overlay {showControls || !isPlaying ? 'visible' : ''}">
+	<div class="controls-overlay {showControls || !player?.isPlaying ? 'visible' : ''}">
 		{#if !isYoutube}
 			<div class="peek-video-container" style="display: none;">
 				<!-- svelte-ignore a11y-media-has-caption -->
@@ -636,7 +633,7 @@
 		</div>
 
 		<Controls
-			{isPlaying}
+			isPlaying={player?.isPlaying ?? false}
 			{currentTime}
 			{duration}
 			{volume}

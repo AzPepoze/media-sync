@@ -25,6 +25,8 @@ export type PlayerType = 'youtube' | 'html5';
 
 export abstract class BasePlayer {
     abstract readonly type: PlayerType;
+    protected _isPlaying: boolean = false;
+    protected onPlayingChange?: (isPlaying: boolean) => void;
 
     abstract play(): Promise<void> | void;
     abstract pause(): void;
@@ -37,6 +39,23 @@ export abstract class BasePlayer {
     
     // Helper to check if player is ready
     abstract get isReady(): boolean;
+    
+    // Get current playing state
+    get isPlaying(): boolean {
+        return this._isPlaying;
+    }
+    
+    // Set callback for playing state changes
+    setPlayingChangeCallback(callback: (isPlaying: boolean) => void) {
+        this.onPlayingChange = callback;
+    }
+    
+    protected updatePlayingState(isPlaying: boolean) {
+        if (this._isPlaying !== isPlaying) {
+            this._isPlaying = isPlaying;
+            this.onPlayingChange?.(isPlaying);
+        }
+    }
 }
 
 // -------------------------------------------------------
@@ -51,11 +70,17 @@ export class YouTubePlayer extends BasePlayer {
     }
 
     play() {
-        if (this.component) this.component.play();
+        if (this.component) {
+            this.component.play();
+            this.updatePlayingState(true);
+        }
     }
 
     pause() {
-        if (this.component) this.component.pause();
+        if (this.component) {
+            this.component.pause();
+            this.updatePlayingState(false);
+        }
     }
 
     seek(time: number) {
@@ -185,13 +210,16 @@ export class HTML5Player extends BasePlayer {
     async play() {
         try {
             await this.videoElement.play();
+            this.updatePlayingState(true);
         } catch (e) {
             console.warn("[HTML5Player] Play interrupted or failed:", e);
+            this.updatePlayingState(false);
         }
     }
 
     pause() {
         this.videoElement.pause();
+        this.updatePlayingState(false);
     }
 
     seek(time: number) {
