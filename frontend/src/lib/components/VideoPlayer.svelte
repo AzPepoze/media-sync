@@ -180,21 +180,29 @@
 		});
 	}
 
+	function checkIsMobile() {
+		if (typeof navigator === "undefined") return false;
+		return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+	}
+
 	function getProxyUrl(url: string, referer: string = ""): string {
-		// Hybrid Strategy:
-		// 1. Proxy Playlist/Manifest files (.m3u8, .txt) to bypass initial CORS/Referer checks.
-		//    The backend will rewrite the playlist to point to absolute URLs for segments.
-		// 2. Direct load for everything else (MP4, WebM) using the Extension.
+		const isMobile = checkIsMobile();
 		const lowerUrl = url.toLowerCase();
+
+		if (isMobile) {
+			let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}&proxySegments=true`;
+			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
+			return videoUrl;
+		}
+
 		if (lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt") || lowerUrl.includes(".mpd")) {
-			let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
+			let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`; // proxySegments defaults to false
 			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
 			return videoUrl;
 		}
 
 		return url;
 	}
-
 	function isHlsSource(url: string): boolean {
 		const lowerUrl = url.toLowerCase();
 		return lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt");
@@ -257,7 +265,11 @@
 				// Immediate CORS detection for Manifest or Initial Fragment
 				if (isCorsLike) {
 					// If it fails immediately (no buffer) or it's a manifest issue, it's likely CORS.
-					if (buffered === 0 || data.details === "manifestLoadError" || data.details === "fragLoadError") {
+					if (
+						buffered === 0 ||
+						data.details === "manifestLoadError" ||
+						data.details === "fragLoadError"
+					) {
 						console.warn("[Player] Detected potential CORS error:", data.details);
 						hls?.destroy();
 						showCorsHelp = true;

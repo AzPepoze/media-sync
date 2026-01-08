@@ -12,6 +12,7 @@ const DEFAULT_USER_AGENT =
 interface ProxyRequestQuery {
 	url?: string;
 	referer?: string;
+	proxySegments?: string;
 }
 
 // Helper Functions
@@ -49,7 +50,8 @@ const rewriteManifestContent = (
 	manifestContent: string,
 	manifestBaseUrl: string,
 	serverBaseUrl: string,
-	referer?: string
+	referer?: string,
+	proxySegments?: boolean
 ): string => {
 	const lines = manifestContent.split("\n");
 
@@ -74,9 +76,16 @@ const rewriteManifestContent = (
 			return line;
 		}
 
-		// Handle Segment URLs (No Proxy, just Absolute URL)
+		// Handle Segment URLs
 		const absoluteSegmentUrl = resolveAbsoluteUrl(trimmedLine, manifestBaseUrl);
-		return absoluteSegmentUrl;
+
+		if (proxySegments) {
+			// For Mobile: Route everything through proxy
+			return createProxiedUrl(absoluteSegmentUrl, serverBaseUrl, referer);
+		} else {
+			// For Desktop: Direct access (Absolute URL)
+			return absoluteSegmentUrl;
+		}
 	});
 
 	return rewrittenLines.join("\n");
@@ -84,7 +93,8 @@ const rewriteManifestContent = (
 
 // Route Handlers
 router.get("/proxy", async (req: Request, res: Response) => {
-	const { url: targetUrl, referer } = req.query as unknown as ProxyRequestQuery;
+	const { url: targetUrl, referer, proxySegments } = req.query as unknown as ProxyRequestQuery;
+	const shouldProxySegments = proxySegments === "true";
 
 	if (!targetUrl || typeof targetUrl !== "string") {
 		return res.status(400).send("Missing or invalid 'url' parameter");
@@ -160,7 +170,8 @@ router.get("/proxy", async (req: Request, res: Response) => {
 						manifestText,
 						finalResourceUrl,
 						serverBaseUrl,
-						referer
+						referer,
+						shouldProxySegments
 					);
 					res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
 					res.send(rewrittenManifest);
