@@ -49,10 +49,10 @@
 						<path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
 					</svg>
 				</button>
-				<div class="mobile-brand" on:click={goHome}>
+				<button class="mobile-brand" on:click={goHome}>
 					<img src="/logo.png" alt="Media Sync" />
 					<span>Media Sync</span>
-				</div>
+				</button>
 			</div>
 			<VideoPlayer />
 			<UrlBar />
@@ -144,17 +144,25 @@
 				justify-content: center;
 			}
 
-			.mobile-brand {
-				display: flex;
-				align-items: center;
-				gap: 0.5rem;
-				font-weight: bold;
-				img {
-					height: 20px;
-				}
+		.mobile-brand {
+			display: flex;
+			align-items: center;
+			gap: 0.8rem;
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            color: white;
+            font-family: inherit;
+
+			img {
+				height: 32px;
+				width: auto;
 			}
+
 		}
 	}
+    }
 
 	.player-area {
 		display: flex;

@@ -8,8 +8,10 @@
 		roomError,
 		emitAction,
 		currentRoomId,
-		SERVER_URL,
 	} from "../stores/socket";
+	// Utilities
+	import { getYoutubeId, getProxyUrl, isHlsSource } from "../utils/media";
+
 	// Sub-components
 	import SeekTooltip from "./player/SeekTooltip.svelte";
 	import Controls from "./player/Controls.svelte";
@@ -17,18 +19,27 @@
 	import ErrorOverlay from "./player/ErrorOverlay.svelte";
 	import NoVideoOverlay from "./player/NoVideoOverlay.svelte";
 	import CorsHelpOverlay from "./player/CorsHelpOverlay.svelte";
+	import YoutubeEmbed from "./player/YoutubeEmbed.svelte";
 
+	// Elements & Refs
 	let videoElement: HTMLVideoElement;
 	let peekVideo: HTMLVideoElement;
+	let ytComponent: YoutubeEmbed; // Reference to child component
+
 	let hls: Hls | null = null;
 	let peekHls: Hls | null = null;
 
 	// State Tracking
+	let isYoutube = false;
 	let currentLoadedUrl = "";
 	let currentLoadedReferer = "";
+
+	// Sync State
 	let isRemoteActionActive = false;
 	let isRemoteSeeking = false;
 	let localIsBuffering = false;
+
+	// Error State
 	let hasError = false;
 	let showCorsHelp = false;
 	let errorMessage = "";
@@ -49,29 +60,34 @@
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
 
-	function showControlsTemp() {
-		showControls = true;
-		hideCursor = false;
-		clearTimeout(controlsTimeout);
-		if (isPlaying && !isHoveringSeek) {
-			controlsTimeout = setTimeout(() => {
-				showControls = false;
-				hideCursor = true;
-			}, 3000);
+	// --- Helper to init Peek HLS (used in hover) ---
+	function initPeekHls() {
+		if (!currentLoadedUrl || peekHls) return;
+		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
+		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
+			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, startLevel: 0 });
+			peekHls.loadSource(videoUrl);
+			peekHls.attachMedia(peekVideo);
+		} else if (peekVideo) {
+			peekVideo.src = videoUrl;
+			peekVideo.load();
 		}
 	}
 
+	// --- Main Load Logic ---
 	function loadCurrentVideo() {
 		if (!$roomState?.videoUrl) return;
 
-		// Check if it's a direct media link (ends with extension or contains common stream keywords)
+		const ytId = getYoutubeId($roomState.videoUrl);
+
 		const isDirectLink =
+			ytId ||
 			isHlsSource($roomState.videoUrl) ||
 			$roomState.videoUrl.match(/\.(mp4|webm|mkv|mov|avi|flv)(\?|$)/i) ||
 			$roomState.videoUrl.includes("googlevideo.com");
 
 		if (!isDirectLink) {
-			console.log("[Player] URL is not a direct media link yet, skipping load.");
+			console.log("[Player] URL skipping load.");
 			return;
 		}
 
@@ -85,22 +101,43 @@
 
 		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
 			loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
-		} else if (videoElement) {
-			const diff = Math.abs(videoElement.currentTime - targetTime);
+		} else {
+			// --- Sync Check (Drift Correction) ---
+			let currentPlayerTime = 0;
+			if (isYoutube && ytComponent) currentPlayerTime = ytComponent.getCurrentTime();
+			else if (!isYoutube && videoElement) currentPlayerTime = videoElement.currentTime;
+
+			const diff = Math.abs(currentPlayerTime - targetTime);
 			if (diff > 2) {
 				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
 				isRemoteActionActive = true;
-				videoElement.currentTime = targetTime;
+				if (isYoutube && ytComponent) ytComponent.seekTo(targetTime);
+				else if (videoElement) videoElement.currentTime = targetTime;
 				setTimeout(() => (isRemoteActionActive = false), 2000);
 			}
-			if ($roomState.isPlaying && videoElement.paused && !$isWaitingForOthers && !localIsBuffering) {
-				videoElement.play().catch(() => {});
-			} else if (!$roomState.isPlaying && !videoElement.paused) {
-				videoElement.pause();
+
+			// Play/Pause Sync
+			const shouldBePlaying = $roomState.isPlaying;
+			let amIPlaying = false;
+
+			if (isYoutube && ytComponent) {
+				const state = ytComponent.getPlayerState();
+				amIPlaying = state === 1; // 1 = Playing
+			} else if (videoElement) {
+				amIPlaying = !videoElement.paused;
+			}
+
+			if (shouldBePlaying && !amIPlaying && !$isWaitingForOthers && !localIsBuffering) {
+				if (isYoutube && ytComponent) ytComponent.play();
+				else if (videoElement) videoElement.play().catch(() => {});
+			} else if (!shouldBePlaying && amIPlaying) {
+				if (isYoutube && ytComponent) ytComponent.pause();
+				else if (videoElement) videoElement.pause();
 			}
 		}
 	}
 
+	// --- Reactivity ---
 	$: if ($roomState) loadCurrentVideo();
 
 	$: if ($socket) {
@@ -115,42 +152,52 @@
 		});
 
 		$socket.on("player_action", (data: { action: string; time: number }) => {
-			if (!videoElement) return;
+			// Guard: Player must exist
+			if (!videoElement && !ytComponent) return;
+
+			let playerTime = 0;
+			if (isYoutube && ytComponent) playerTime = ytComponent.getCurrentTime();
+			else if (videoElement) playerTime = videoElement.currentTime;
+
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
 			if (data.action === "seek") {
-				// Avoid re-seeking if we are already close (e.g. sender)
-				if (Math.abs(videoElement.currentTime - data.time) < 0.5) {
-					console.log("[Player] Ignoring seek, already at time.");
-					return;
-				}
+				if (Math.abs(playerTime - data.time) < 0.5) return;
 
-				console.log("[Player] Remote seek to", data.time);
 				isRemoteSeeking = true;
-				videoElement.currentTime = data.time;
+				if (isYoutube && ytComponent) ytComponent.seekTo(data.time);
+				else if (videoElement) videoElement.currentTime = data.time;
 
 				localIsBuffering = true;
 				emitAction("buffering_start", $currentRoomId);
 
-				// Safety: If the video is already at this time, onSeeked might not fire
 				setTimeout(() => {
-					if (isRemoteSeeking && Math.abs(videoElement.currentTime - data.time) < 0.2) {
-						onSeeked();
-					}
+					// Manually trigger seeked logic after delay to ensure sync
+					if (isYoutube) onSeeked();
+					else if (Math.abs(videoElement.currentTime - data.time) < 0.2) onSeeked();
 				}, 1000);
 				return;
 			}
+
 			isRemoteActionActive = true;
-			const diff = Math.abs(videoElement.currentTime - data.time);
-			if (diff > 0.5) videoElement.currentTime = data.time;
+			// Sync time if difference is large
+			const diff = Math.abs(playerTime - data.time);
+			if (diff > 0.5) {
+				if (isYoutube && ytComponent) ytComponent.seekTo(data.time);
+				else if (videoElement) videoElement.currentTime = data.time;
+			}
+
 			if (data.action === "play") {
 				isPlaying = true;
-				videoElement.play().catch(() => {
-					isPlaying = false;
-				});
+				if (isYoutube && ytComponent) ytComponent.play();
+				else if (videoElement)
+					videoElement.play().catch(() => {
+						isPlaying = false;
+					});
 			} else if (data.action === "pause") {
-				videoElement.pause();
 				isPlaying = false;
+				if (isYoutube && ytComponent) ytComponent.pause();
+				else if (videoElement) videoElement.pause();
 			}
 			setTimeout(() => {
 				isRemoteActionActive = false;
@@ -158,21 +205,29 @@
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
-			if (!videoElement) return;
-			console.log("[Player] Room buffering updated:", isBuffering);
-
+			if (!videoElement && !ytComponent) return;
 			isRemoteActionActive = true;
+
+			let playerPaused = true;
+			if (isYoutube && ytComponent) playerPaused = ytComponent.getPlayerState() !== 1;
+			else if (videoElement) playerPaused = videoElement.paused;
+
 			if (isBuffering) {
-				if (!videoElement.paused) {
-					videoElement.pause();
-					isPlaying = false;
+				if (!playerPaused) {
+					if (isYoutube && ytComponent) ytComponent.pause();
+					else if (videoElement) {
+						videoElement.pause();
+						isPlaying = false;
+					}
 				}
 			} else if ($roomState.isPlaying && !localIsBuffering) {
-				// Room should be playing and we are not buffering anymore
-				if (videoElement.paused) {
-					videoElement.play().catch(() => {});
+				if (playerPaused) {
+					if (isYoutube && ytComponent) ytComponent.play();
+					else if (videoElement) {
+						videoElement.play().catch(() => {});
+						isPlaying = true;
+					}
 				}
-				isPlaying = true;
 			}
 			setTimeout(() => {
 				isRemoteActionActive = false;
@@ -180,35 +235,7 @@
 		});
 	}
 
-	function checkIsMobile() {
-		if (typeof navigator === "undefined") return false;
-		return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-	}
-
-	function getProxyUrl(url: string, referer: string = ""): string {
-		const isMobile = checkIsMobile();
-		const lowerUrl = url.toLowerCase();
-
-		if (isMobile) {
-			let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}&proxySegments=true`;
-			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
-			return videoUrl;
-		}
-
-		if (lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt") || lowerUrl.includes(".mpd")) {
-			let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`; // proxySegments defaults to false
-			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
-			return videoUrl;
-		}
-
-		return url;
-	}
-	function isHlsSource(url: string): boolean {
-		const lowerUrl = url.toLowerCase();
-		return lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt");
-	}
-
-	function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
+	async function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
 		localIsBuffering = true;
 		emitAction("buffering_start", $currentRoomId);
 		hasError = false;
@@ -220,22 +247,38 @@
 		retryCount = 0;
 		isRemoteActionActive = true;
 
-		if (videoElement) {
-			videoElement.pause();
-			videoElement.currentTime = startTime;
-			videoElement.removeAttribute("src");
-			videoElement.load();
-		}
-
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
 
-		const videoUrl = getProxyUrl(url, referer);
+		const ytId = getYoutubeId(url);
 
+		// --- Cleanup Previous State ---
+		if (videoElement) {
+			videoElement.pause();
+			videoElement.removeAttribute("src");
+			videoElement.load();
+		}
 		if (hls) {
 			hls.destroy();
 			hls = null;
 		}
+
+		// --- Mode Switching ---
+		if (ytId) {
+			isYoutube = true;
+			// Give svelte a moment to mount the component if it wasn't there
+			setTimeout(() => {
+				// YoutubeEmbed handles its own init via props/bind,
+				// but since we are remounting/changing ID, Svelte reactivity handles passing `videoId`
+				// We just need to wait for 'ready' event from it.
+			}, 0);
+			return;
+		} else {
+			isYoutube = false;
+		}
+
+		// --- HTML5 / HLS Load ---
+		const videoUrl = getProxyUrl(url, referer);
 
 		if (Hls.isSupported() && isHlsSource(url)) {
 			hls = new Hls({
@@ -244,6 +287,9 @@
 				levelLoadingMaxRetry: 2,
 				fragLoadingMaxRetry: 3,
 				enableWorker: true,
+				xhrSetup: (xhr, url) => {
+					xhr.withCredentials = false;
+				},
 			});
 			hls.on(Hls.Events.MANIFEST_PARSED, () => {
 				isVideoChanging.set(false);
@@ -262,15 +308,12 @@
 				const isNetworkError = data.type === Hls.ErrorTypes.NETWORK_ERROR;
 				const isCorsLike = isNetworkError && (!status || status === 0);
 
-				// Immediate CORS detection for Manifest or Initial Fragment
 				if (isCorsLike) {
-					// If it fails immediately (no buffer) or it's a manifest issue, it's likely CORS.
 					if (
 						buffered === 0 ||
 						data.details === "manifestLoadError" ||
 						data.details === "fragLoadError"
 					) {
-						console.warn("[Player] Detected potential CORS error:", data.details);
 						hls?.destroy();
 						showCorsHelp = true;
 						localIsBuffering = false;
@@ -303,20 +346,44 @@
 		}
 	}
 
-	function initPeekHls() {
-		if (!currentLoadedUrl || peekHls) return;
-		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
-		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
-			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, startLevel: 0 });
-			peekHls.loadSource(videoUrl);
-			peekHls.attachMedia(peekVideo);
-		} else if (peekVideo) {
-			peekVideo.src = videoUrl;
-			peekVideo.load();
+	// --- Handlers (Universal) ---
+
+		function onYoutubeReady(e: CustomEvent) {
+
+			console.log("[Youtube] Ready");
+
+			isVideoChanging.set(false);
+
+			duration = e.detail.duration;
+
+			localIsBuffering = false;
+
+			emitAction("buffering_end", $currentRoomId);
+
+			setTimeout(() => { isRemoteActionActive = false; }, 2000);
+
 		}
+
+	
+
+		function onYoutubeStateChange(e: CustomEvent) {
+
+			// e.detail is the state code directly forwarded from YoutubeEmbed "play", "pause" etc events
+
+			// actually YoutubeEmbed dispatches specific events like "play", "pause", "waiting".
+
+			// We need to listen to those.
+
+		}
+
+	function onYoutubeTimeUpdate(e: CustomEvent) {
+		currentTime = e.detail.currentTime;
+		duration = e.detail.duration;
+		buffered = e.detail.buffered;
 	}
 
 	function onTimeUpdate() {
+		if (isYoutube) return;
 		currentTime = videoElement.currentTime;
 		if (videoElement.buffered.length > 0) {
 			buffered = (videoElement.buffered.end(videoElement.buffered.length - 1) / duration) * 100;
@@ -324,36 +391,46 @@
 	}
 
 	function onPlay() {
+		// If youtube starts playing, force remove loading overlay immediately
+		if (isYoutube) {
+			console.log("[Youtube] Playing -> Clearing Buffering");
+			isVideoChanging.set(false);
+			localIsBuffering = false;
+			emitAction("buffering_end", $currentRoomId);
+		}
+
 		isPlaying = true;
 		if (!isRemoteActionActive && !isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
-			emitAction("play", { roomId: $currentRoomId, time: videoElement.currentTime });
+			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+			emitAction("play", { roomId: $currentRoomId, time: t });
 		}
 	}
 
 	function onPause() {
 		isPlaying = false;
 		if (!isRemoteActionActive && !isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
-			emitAction("pause", { roomId: $currentRoomId, time: videoElement.currentTime });
+			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+			emitAction("pause", { roomId: $currentRoomId, time: t });
 		}
 	}
 
+	function onYoutubeError(e: CustomEvent) {
+		console.error("Youtube Error:", e.detail);
+		showError("YouTube Error Code: " + e.detail);
+	}
+
 	function onSeeked() {
-		const wasBuffering = localIsBuffering;
-		// Clear local buffering state regardless of origin
 		if (localIsBuffering) {
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 		}
-
-		// If the seek was triggered by a remote event, just clear the flag
 		if (isRemoteSeeking) {
 			isRemoteSeeking = false;
 			return;
 		}
-
-		// Emit seek only if it was a local user action and we weren't just syncing/buffering
-		if (!isRemoteActionActive && !wasBuffering) {
-			emitAction("seek", { roomId: $currentRoomId, time: videoElement.currentTime });
+		if (!isRemoteActionActive) {
+			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+			emitAction("seek", { roomId: $currentRoomId, time: t });
 		}
 	}
 
@@ -386,38 +463,40 @@
 	}
 
 	function handleVideoError() {
-		if (hls) return;
+		if (hls || isYoutube) return;
 		const err = videoElement.error;
-		// Code 2 (NETWORK) or 4 (SRC_NOT_SUPPORTED) often implies access issues or CORS when url is valid
 		if (err && (err.code === 2 || err.code === 4)) {
 			showCorsHelp = true;
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 			return;
 		}
-
 		if (retryCount < MAX_RETRIES) {
 			retryCount++;
-			setTimeout(() => loadCurrentVideo(), 1000);
+			setTimeout(() => loadVideo(currentLoadedUrl, currentLoadedReferer), 1000);
 		} else {
 			showError("Video load failed.");
 		}
 	}
 
+	// --- Control Actions ---
 	function togglePlay() {
-		isPlaying ? videoElement.pause() : videoElement.play();
+		if (isYoutube && ytComponent) {
+			isPlaying ? ytComponent.pause() : ytComponent.play();
+		} else if (videoElement) {
+			isPlaying ? videoElement.pause() : videoElement.play();
+		}
 	}
 
 	function handleSeek(e: MouseEvent) {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const percent = (e.clientX - rect.left) / rect.width;
 		const newTime = percent * duration;
-
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 
 	function handleSeekHover(e: MouseEvent) {
-		if (!peekHls) initPeekHls();
+		if (!peekHls && !isYoutube) initPeekHls();
 		isHoveringSeek = true;
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		seekHoverPercent = (e.clientX - rect.left) / rect.width;
@@ -429,35 +508,63 @@
 
 	function handleVolume(e: Event) {
 		volume = parseFloat((e.target as HTMLInputElement).value);
-		videoElement.volume = volume;
+		if (isYoutube && ytComponent) {
+			ytComponent.setVolume(volume);
+			if (volume === 0) ytComponent.mute();
+			else ytComponent.unMute();
+		} else if (videoElement) {
+			videoElement.volume = volume;
+		}
 		isMuted = volume === 0;
 	}
 
 	function toggleMute() {
 		isMuted = !isMuted;
 		volume = isMuted ? 0 : 1;
-		videoElement.volume = volume;
-		videoElement.muted = isMuted;
+		if (isYoutube && ytComponent) {
+			isMuted ? ytComponent.mute() : ytComponent.unMute();
+			ytComponent.setVolume(volume);
+		} else if (videoElement) {
+			videoElement.volume = volume;
+			videoElement.muted = isMuted;
+		}
 	}
 
 	function toggleFullscreen() {
-		const wrapper = videoElement.parentElement;
-		if (!document.fullscreenElement) wrapper?.requestFullscreen();
+		const wrapper = videoElement?.parentElement || ytComponent?.$$.root?.parentElement;
+		// Note: $$.root access is internal Svelte, better to rely on container div class
+		const container = document.querySelector(".player-container");
+		if (!document.fullscreenElement) container?.requestFullscreen();
 		else document.exitFullscreen();
 	}
 
 	async function togglePip() {
 		try {
-			if (document.pictureInPictureElement) await document.exitPictureInPicture();
-			else if (videoElement?.requestPictureInPicture) await videoElement.requestPictureInPicture();
+			if (!isYoutube && videoElement) {
+				if (document.pictureInPictureElement) await document.exitPictureInPicture();
+				else if (videoElement?.requestPictureInPicture) await videoElement.requestPictureInPicture();
+			}
 		} catch (err) {
 			console.error("PiP failed:", err);
 		}
 	}
 
 	function skipTime(seconds: number) {
-		const newTime = Math.max(0, Math.min(duration, videoElement.currentTime + seconds));
+		const curr = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+		const newTime = Math.max(0, Math.min(duration, curr + seconds));
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
+	}
+
+	function showControlsTemp() {
+		showControls = true;
+		hideCursor = false;
+		clearTimeout(controlsTimeout);
+		if (isPlaying && !isHoveringSeek) {
+			controlsTimeout = setTimeout(() => {
+				showControls = false;
+				hideCursor = true;
+			}, 3000);
+		}
 	}
 
 	function handleVideoClick() {
@@ -499,14 +606,43 @@
 
 <div
 	class="player-container"
+    role="application"
 	class:hide-cursor={hideCursor}
 	on:mousemove={showControlsTemp}
 	on:mouseleave={() => (showControls = false)}
 >
+	<!-- YouTube Player Component -->
+	{#if isYoutube && getYoutubeId(currentLoadedUrl)}
+		<div class="youtube-wrapper">
+			<YoutubeEmbed
+				bind:this={ytComponent}
+				videoId={getYoutubeId(currentLoadedUrl) || ""}
+				startTime={currentTime}
+				shouldPlay={isPlaying}
+				{volume}
+				{isMuted}
+				on:ready={onYoutubeReady}
+				on:timeupdate={onYoutubeTimeUpdate}
+				on:play={onPlay}
+				on:pause={onPause}
+				on:waiting={onWaiting}
+				on:ended={onPause}
+				on:error={onYoutubeError}
+			/>
+			<!-- Click Overlay -->
+			<!-- svelte-ignore a11y-click-events-have-key-events -->
+			<!-- svelte-ignore a11y-no-static-element-interactions -->
+			<div class="yt-click-overlay" on:click={handleVideoClick}></div>
+		</div>
+	{/if}
+
+	<!-- HTML5 Video Player -->
 	<!-- svelte-ignore a11y-media-has-caption -->
 	<video
 		bind:this={videoElement}
+		class:hidden={isYoutube}
 		playsinline
+		crossorigin="anonymous"
 		on:timeupdate={onTimeUpdate}
 		on:durationchange={() => (duration = videoElement.duration)}
 		on:play={onPlay}
@@ -544,17 +680,25 @@
 	{/if}
 
 	<div class="controls-overlay {showControls || !isPlaying ? 'visible' : ''}">
-		<div class="peek-video-container" style="display: none;">
-			<!-- svelte-ignore a11y-media-has-caption -->
-			<video bind:this={peekVideo} muted playsinline preload="auto"></video>
-		</div>
+		{#if !isYoutube}
+			<div class="peek-video-container" style="display: none;">
+				<!-- svelte-ignore a11y-media-has-caption -->
+				<video bind:this={peekVideo} muted playsinline preload="auto"></video>
+			</div>
+		{/if}
 
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div
 			class="progress-bar-container"
+            role="slider"
+            tabindex="0"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow={duration ? (currentTime / duration) * 100 : 0}
 			on:mousemove={handleSeekHover}
 			on:mouseleave={() => (isHoveringSeek = false)}
 			on:click={handleSeek}
+            on:keydown={(e) => { if(e.key === 'ArrowRight') skipTime(5); if(e.key === 'ArrowLeft') skipTime(-5); }}
 		>
 			<div class="progress-bg"></div>
 			<div class="progress-buffered" style="width: {buffered}%"></div>
@@ -597,12 +741,46 @@
 		&.hide-cursor {
 			cursor: none;
 		}
+
 		video {
 			width: 100%;
 			height: 100%;
 			object-fit: contain;
 			aspect-ratio: 16/9;
+			position: absolute;
+			top: 0;
+			left: 0;
+
+			&.hidden {
+				display: none;
+				visibility: hidden;
+				pointer-events: none;
+			}
 		}
+		.youtube-wrapper {
+			width: 100%;
+			height: 100%;
+			object-fit: contain;
+			aspect-ratio: 16/9;
+			position: absolute;
+			top: 0;
+			left: 0;
+		}
+
+		.youtube-wrapper {
+			position: relative; // Needs to be relative for overlay absolute
+		}
+
+		.yt-click-overlay {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: calc(100% - 80px); /* Leave space for controls */
+			z-index: 10;
+			cursor: pointer;
+		}
+
 		.controls-overlay {
 			position: absolute;
 			bottom: 0;
@@ -615,6 +793,7 @@
 			display: flex;
 			flex-direction: column;
 			gap: 10px;
+			z-index: 20;
 			&.visible {
 				opacity: 1;
 			}

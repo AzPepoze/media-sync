@@ -24,7 +24,7 @@
 		if ($currentRoomId && inputUrl.trim()) {
 			isLoading = true;
 			isVideoChanging.set(true); // Instant feedback locally
-			setUrl($currentRoomId, inputUrl, refererUrl);
+			setUrl($currentRoomId, inputUrl.trim(), refererUrl.trim());
 			// Security fallback: if backend fails to respond, reset loading after 15s
 			setTimeout(() => {
 				isLoading = false;

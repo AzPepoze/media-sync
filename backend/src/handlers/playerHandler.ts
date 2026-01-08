@@ -5,26 +5,39 @@ import { resolveVideoUrl } from "../utils/getVideoUrl";
 export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	socket.on("set_url", async ({ roomId, url, referer }: { roomId: string; url: string; referer?: string }) => {
 		if (rooms[roomId]) {
-			console.log(`[Player] Request to set URL in room ${roomId}: ${url}`);
+			const cleanUrl = url.trim();
+			console.log(`[Player] Request to set URL in room ${roomId}: ${cleanUrl}`);
 
 			// Notify everyone immediately that we are processing
 			io.to(roomId).emit("video_changing");
 
 			try {
-				const resolved = await resolveVideoUrl(url);
+				let finalUrl = cleanUrl;
+				let finalReferer = referer;
 
-				// Update room state only with the resolved direct URL
-				rooms[roomId].videoUrl = resolved.url;
+				// Check if it is a YouTube URL
+				// If it is, we DO NOT want to resolve it. We want the original link
+				// so the frontend can use the YouTube Embed Player.
+				const isYoutube = /^(https?\:\/\/)?((www\.)?youtube\.com|youtu\.?be)\/.+$/.test(cleanUrl);
 
-				// Use only resolved referer or user-provided referer.
-				const finalReferer = resolved.referer || referer;
+				if (!isYoutube) {
+					// Only resolve if NOT Youtube
+					const resolved = await resolveVideoUrl(cleanUrl);
+					finalUrl = resolved.url;
+					finalReferer = resolved.referer || referer;
+				} else {
+					console.log(`[Player] Detected YouTube URL. Skipping resolution to keep Embed compatibility.`);
+				}
+
+				// Update room state
+				rooms[roomId].videoUrl = finalUrl;
 				rooms[roomId].referer = finalReferer && finalReferer.trim() !== "" ? finalReferer : null;
 
 				rooms[roomId].currentTime = 0;
-				rooms[roomId].isPlaying = true;
+				rooms[roomId].isPlaying = true; // Auto-play
 				rooms[roomId].lastUpdated = Date.now();
 
-				console.log(`[Player] URL resolved successfully for room ${roomId}`);
+				console.log(`[Player] URL set successfully for room ${roomId}`);
 				io.to(roomId).emit("sync_state", rooms[roomId]);
 			} catch (error) {
 				io.to(roomId).emit(
