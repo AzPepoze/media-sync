@@ -50,7 +50,7 @@ export abstract class BasePlayer {
         this.onPlayingChange = callback;
     }
     
-    protected updatePlayingState(isPlaying: boolean) {
+    updatePlayingState(isPlaying: boolean) {
         if (this._isPlaying !== isPlaying) {
             this._isPlaying = isPlaying;
             this.onPlayingChange?.(isPlaying);

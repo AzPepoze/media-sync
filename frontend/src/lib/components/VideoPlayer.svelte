@@ -293,9 +293,12 @@
 
 			if ($roomState.isPlaying) {
 				console.log("[Youtube] Auto-resume detected. Suppressing 'play' emit.");
+				if (player) player.updatePlayingState(true);
 				return;
 			}
 		}
+
+		if (player) player.updatePlayingState(true);
 
 		if (player && player.isPlaying) return;
 
@@ -309,6 +312,8 @@
 
 	function onPause() {
 		console.log("[Player] onPause triggered");
+
+		if (player) player.updatePlayingState(false);
 
 		if (player && !player.isPlaying) return;
 
@@ -535,7 +540,7 @@
 				bind:this={ytComponent}
 				videoId={getYoutubeId(currentLoadedUrl) || ""}
 				startTime={currentTime}
-				shouldPlay={isPlaying}
+				shouldPlay={player?.isPlaying ?? false}
 				{volume}
 				{isMuted}
 				on:ready={onYoutubeReady}
