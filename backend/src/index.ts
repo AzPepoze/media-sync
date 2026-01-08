@@ -7,8 +7,12 @@ import { registerRoomHandlers } from "./handlers/roomHandler";
 import { registerPlayerHandlers } from "./handlers/playerHandler";
 import { rooms } from "./store";
 
+const allowedOrigin = process.env.FRONTEND_URL || "*";
+
 const app = express();
-app.use(cors());
+app.use(cors({
+	origin: allowedOrigin,
+}));
 
 app.get("/check-room/:roomId", (req, res) => {
 	const { roomId } = req.params;
@@ -21,7 +25,7 @@ app.use("/", proxyRoutes);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
 	cors: {
-		origin: process.env.FRONTEND_URL || "http://localhost:3000",
+		origin: allowedOrigin,
 		methods: ["GET", "POST"],
 	},
 	pingInterval: 10000,

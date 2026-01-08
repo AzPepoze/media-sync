@@ -60,6 +60,22 @@
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
+	let remoteActionTimeout: ReturnType<typeof setTimeout>;
+
+	function setSyncState(isActive: boolean, duration = 1500) {
+		clearTimeout(remoteActionTimeout);
+		if (isActive) {
+			isRemoteActionActive = true;
+			isSyncing = true;
+			remoteActionTimeout = setTimeout(() => {
+				isRemoteActionActive = false;
+				isSyncing = false;
+			}, duration);
+		} else {
+			isRemoteActionActive = false;
+			isSyncing = false;
+		}
+	}
 
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
@@ -102,6 +118,10 @@
 			loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
 		} else {
 			// --- Sync Check ---
+			// If we are currently processing a remote action (socket event), 
+			// do not interfere with local state corrections to avoid fighting/loops.
+			if (isRemoteActionActive) return;
+
 			let currentPlayerTime = 0;
 			if (isYoutube && ytComponent) currentPlayerTime = ytComponent.getCurrentTime();
 			else if (!isYoutube && videoElement) currentPlayerTime = videoElement.currentTime;
@@ -109,14 +129,9 @@
 			const diff = Math.abs(currentPlayerTime - targetTime);
 			if (diff > 2) {
 				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
-				isRemoteActionActive = true;
-				isSyncing = true;
+				setSyncState(true, 2000);
 				if (isYoutube && ytComponent) ytComponent.seekTo(targetTime);
 				else if (videoElement) videoElement.currentTime = targetTime;
-				setTimeout(() => {
-					isRemoteActionActive = false;
-					isSyncing = false;
-				}, 2000);
 			}
 
 			const shouldBePlaying = $roomState.isPlaying;
@@ -130,15 +145,13 @@
 			}
 
 			if (shouldBePlaying && !amIPlaying && !$isWaitingForOthers && !localIsBuffering) {
-				isSyncing = true;
+				setSyncState(true, 1500);
 				if (isYoutube && ytComponent) ytComponent.play();
 				else if (videoElement) videoElement.play().catch(() => {});
-				setTimeout(() => (isSyncing = false), 500);
 			} else if (!shouldBePlaying && amIPlaying) {
-				isSyncing = true;
+				setSyncState(true, 1500);
 				if (isYoutube && ytComponent) ytComponent.pause();
 				else if (videoElement) videoElement.pause();
-				setTimeout(() => (isSyncing = false), 500);
 			}
 		}
 	}
@@ -165,14 +178,12 @@
 
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
-			// Set Syncing flag only for Youtube to prevent echo
-			if (isYoutube) isSyncing = true;
-			isRemoteActionActive = true;
+			// Activate Sync State
+			setSyncState(true, 1500);
 
 			if (data.action === "seek") {
 				if (Math.abs(playerTime - data.time) < 0.5) {
-					isSyncing = false;
-					isRemoteActionActive = false;
+					setSyncState(false);
 					return;
 				}
 
@@ -187,11 +198,8 @@
 					if (isYoutube) onSeeked();
 					else if (Math.abs(videoElement.currentTime - data.time) < 0.2) onSeeked();
 				}, 1000);
-				// Keep isSyncing true a bit longer for seek
-				setTimeout(() => {
-					isRemoteActionActive = false;
-					isSyncing = false;
-				}, 1500);
+				// Keep Sync active a bit longer for seek
+				setSyncState(true, 2000);
 				return;
 			}
 
@@ -214,16 +222,12 @@
 				else if (videoElement) videoElement.pause();
 			}
 
-			setTimeout(() => {
-				isRemoteActionActive = false;
-				isSyncing = false;
-			}, 1000);
+			setSyncState(true, 1500);
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!videoElement && !ytComponent) return;
-			isRemoteActionActive = true;
-			isSyncing = true;
+			setSyncState(true, 1000);
 
 			let playerPaused = true;
 			if (isYoutube && ytComponent) playerPaused = ytComponent.getPlayerState() !== 1;
@@ -246,10 +250,7 @@
 					}
 				}
 			}
-			setTimeout(() => {
-				isRemoteActionActive = false;
-				isSyncing = false;
-			}, 500);
+			setSyncState(true, 1000);
 		});
 	}
 
@@ -306,9 +307,7 @@
 					videoElement.currentTime = startTime;
 					if (shouldPlay) videoElement.play().catch(() => {});
 				}
-				setTimeout(() => {
-					isRemoteActionActive = false;
-				}, 2000);
+				setSyncState(true, 2000);
 			});
 			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
@@ -347,9 +346,7 @@
 			videoElement.oncanplay = () => {
 				isVideoChanging.set(false);
 				if (shouldPlay) videoElement.play().catch(() => {});
-				setTimeout(() => {
-					isRemoteActionActive = false;
-				}, 2000);
+				setSyncState(true, 2000);
 			};
 			videoElement.load();
 		}
@@ -361,9 +358,7 @@
 		duration = e.detail.duration;
 		localIsBuffering = false;
 		emitAction("buffering_end", $currentRoomId);
-		setTimeout(() => {
-			isRemoteActionActive = false;
-		}, 2000);
+		setSyncState(true, 2000);
 	}
 
 	function onYoutubeTimeUpdate(e: CustomEvent) {
