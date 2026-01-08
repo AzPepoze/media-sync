@@ -16,12 +16,13 @@
 	import LoadingOverlay from "./player/LoadingOverlay.svelte";
 	import ErrorOverlay from "./player/ErrorOverlay.svelte";
 	import NoVideoOverlay from "./player/NoVideoOverlay.svelte";
+	import CorsHelpOverlay from "./player/CorsHelpOverlay.svelte";
 
 	let videoElement: HTMLVideoElement;
 	let peekVideo: HTMLVideoElement;
 	let hls: Hls | null = null;
 	let peekHls: Hls | null = null;
-	
+
 	// State Tracking
 	let currentLoadedUrl = "";
 	let currentLoadedReferer = "";
@@ -29,6 +30,7 @@
 	let isRemoteSeeking = false;
 	let localIsBuffering = false;
 	let hasError = false;
+	let showCorsHelp = false;
 	let errorMessage = "";
 	let retryCount = 0;
 	const MAX_RETRIES = 2;
@@ -66,8 +68,7 @@
 		const isDirectLink =
 			isHlsSource($roomState.videoUrl) ||
 			$roomState.videoUrl.match(/\.(mp4|webm|mkv|mov|avi|flv)(\?|$)/i) ||
-			$roomState.videoUrl.includes("googlevideo.com") ||
-			$roomState.videoUrl.includes("/proxy?url="); // Already proxied or direct
+			$roomState.videoUrl.includes("googlevideo.com");
 
 		if (!isDirectLink) {
 			console.log("[Player] URL is not a direct media link yet, skipping load.");
@@ -180,9 +181,18 @@
 	}
 
 	function getProxyUrl(url: string, referer: string = ""): string {
-		let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
-		if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
-		return videoUrl;
+		// Hybrid Strategy:
+		// 1. Proxy Playlist/Manifest files (.m3u8, .txt) to bypass initial CORS/Referer checks.
+		//    The backend will rewrite the playlist to point to absolute URLs for segments.
+		// 2. Direct load for everything else (MP4, WebM) using the Extension.
+		const lowerUrl = url.toLowerCase();
+		if (lowerUrl.includes(".m3u8") || lowerUrl.includes(".txt") || lowerUrl.includes(".mpd")) {
+			let videoUrl = `${SERVER_URL}/proxy?url=${encodeURIComponent(url)}`;
+			if (referer) videoUrl += `&referer=${encodeURIComponent(referer)}`;
+			return videoUrl;
+		}
+
+		return url;
 	}
 
 	function isHlsSource(url: string): boolean {
@@ -194,6 +204,7 @@
 		localIsBuffering = true;
 		emitAction("buffering_start", $currentRoomId);
 		hasError = false;
+		showCorsHelp = false;
 		errorMessage = "";
 		currentTime = startTime;
 		buffered = 0;
@@ -239,9 +250,25 @@
 			hls.loadSource(videoUrl);
 			hls.attachMedia(videoElement);
 			hls.on(Hls.Events.ERROR, (e, data) => {
+				const status = data.response?.code;
+				const isNetworkError = data.type === Hls.ErrorTypes.NETWORK_ERROR;
+				const isCorsLike = isNetworkError && (!status || status === 0);
+
+				// Immediate CORS detection for Manifest or Initial Fragment
+				if (isCorsLike) {
+					// If it fails immediately (no buffer) or it's a manifest issue, it's likely CORS.
+					if (buffered === 0 || data.details === "manifestLoadError" || data.details === "fragLoadError") {
+						console.warn("[Player] Detected potential CORS error:", data.details);
+						hls?.destroy();
+						showCorsHelp = true;
+						localIsBuffering = false;
+						emitAction("buffering_end", $currentRoomId);
+						return;
+					}
+				}
+
 				if (data.fatal) {
-					const status = data.response?.code;
-					if (retryCount < MAX_RETRIES && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+					if (retryCount < MAX_RETRIES && isNetworkError) {
 						retryCount++;
 						setTimeout(() => hls?.loadSource(videoUrl), 1000);
 					} else {
@@ -348,6 +375,15 @@
 
 	function handleVideoError() {
 		if (hls) return;
+		const err = videoElement.error;
+		// Code 2 (NETWORK) or 4 (SRC_NOT_SUPPORTED) often implies access issues or CORS when url is valid
+		if (err && (err.code === 2 || err.code === 4)) {
+			showCorsHelp = true;
+			localIsBuffering = false;
+			emitAction("buffering_end", $currentRoomId);
+			return;
+		}
+
 		if (retryCount < MAX_RETRIES) {
 			retryCount++;
 			setTimeout(() => loadCurrentVideo(), 1000);
@@ -477,7 +513,14 @@
 		<NoVideoOverlay />
 	{/if}
 
-	{#if hasError || $roomError}
+	{#if showCorsHelp}
+		<CorsHelpOverlay
+			on:retry={() => {
+				showCorsHelp = false;
+				loadVideo(currentLoadedUrl, currentLoadedReferer);
+			}}
+		/>
+	{:else if hasError || $roomError}
 		<ErrorOverlay
 			errorMessage={errorMessage || $roomError || ""}
 			onRetry={() => {

@@ -191,6 +191,50 @@
 
 	<div class="about-section">
 		<div class="about-container">
+			<!-- Browser Extension Notice -->
+			<div class="extension-notice">
+				<div class="notice-card">
+					<div class="notice-icon">⚠️</div>
+					<div class="notice-content">
+						<h3>Browser Extension Required</h3>
+						<p>
+							Most video sites block third-party players like this one. To watch together smoothly,
+							you need to unblock these restrictions.
+							<br />I recommend the <strong>"CORS Unblock"</strong> extension.
+						</p>
+						<div class="extension-links">
+							<a
+								href="https://chromewebstore.google.com/detail/cors-unblock/lfhmikememgdcahcdlaciloancbhjino"
+								target="_blank"
+								class="ext-btn chrome"
+							>
+								<img
+									src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg"
+									alt="Chrome"
+								/>
+								Chrome / Edge
+							</a>
+							<a
+								href="https://addons.mozilla.org/en-US/firefox/addon/cors-unblock/"
+								target="_blank"
+								class="ext-btn firefox"
+							>
+								<img
+									src="https://upload.wikimedia.org/wikipedia/commons/a/a0/Firefox_logo%2C_2019.svg"
+									alt="Firefox"
+								/>
+								Firefox
+							</a>
+						</div>
+						<p class="small-hint">
+							* Important: Click the extension icon to <strong
+								>activate it (turn it colored)</strong
+							>. Please disable it after using this site.
+						</p>
+					</div>
+				</div>
+			</div>
+
 			<!-- How It Works Section -->
 			<div class="how-it-works">
 				<h2>How it works</h2>
@@ -249,1058 +293,903 @@
 				</div>
 			</div>
 
-						<div class="project-info">
+			<div class="project-info">
+				<h2>About Media Sync</h2>
 
-							<h2>About Media Sync</h2>
+				<p>
+					Media Sync is an open-source project designed to bring people together through shared media
+					experiences. Built with modern technologies, it provides a lightweight and responsive interface
+					for <strong>synchronized video watching</strong>.
+				</p>
 
-							<p>
+				<div class="tech-stack">
+					<span>SvelteKit</span>
 
-								Media Sync is an open-source project designed to bring people together through shared media experiences. 
+					<span>TypeScript</span>
 
-								Built with modern technologies, it provides a lightweight 
+					<span>Socket.io</span>
 
-								and responsive interface for <strong>synchronized video watching</strong>.
+					<span>Node.js</span>
 
-							</p>
+					<span>Express</span>
 
-							<div class="tech-stack">
+					<span>Vite</span>
 
-								<span>SvelteKit</span>
+					<span>Sass</span>
 
-								<span>TypeScript</span>
+					<span>HLS.js</span>
 
-								<span>Socket.io</span>
+					<span>Playwright</span>
 
-								<span>Node.js</span>
+					<span>yt-dlp</span>
 
-								<span>Express</span>
+					<span>Docker</span>
 
-								<span>Vite</span>
-
-								<span>Sass</span>
-
-								<span>HLS.js</span>
-
-								<span>Playwright</span>
-
-								<span>yt-dlp</span>
-
-								<span>Docker</span>
-
-								<span>pnpm</span>
-
-							</div>
-
-						</div>
-
-					</div>
-
+					<span>pnpm</span>
 				</div>
-
 			</div>
+		</div>
+	</div>
+</div>
 
-			
+<style lang="scss">
+	$bg-dark: #0f1115;
 
-			<style lang="scss">
+	$bg-panel: #181b21;
 
-				$bg-dark: #0f1115;
+	$primary: #5865f2;
 
-				$bg-panel: #181b21;
+	$primary-hover: #4752c4;
 
-				$primary: #5865f2;
+	$secondary: #2f3136;
 
-				$primary-hover: #4752c4;
+	$secondary-hover: #40444b;
 
-				$secondary: #2f3136;
+	$text-main: #ffffff;
 
-				$secondary-hover: #40444b;
+	$text-muted: #b9bbbe;
 
-				$text-main: #ffffff;
+	$input-bg: #202225;
 
-				$text-muted: #b9bbbe;
+	$border-color: #2f3136;
 
-				$input-bg: #202225;
+	.welcome-wrapper {
+		height: 100vh;
 
-				$border-color: #2f3136;
+		height: 100dvh;
 
-			
+		overflow-y: auto;
 
-				.welcome-wrapper {
+		scroll-behavior: smooth;
 
-					height: 100vh;
+		background-color: $bg-dark;
+	}
 
-					height: 100dvh;
+	.login-container {
+		display: flex;
 
-					overflow-y: auto;
+		flex-direction: column;
 
-					scroll-behavior: smooth;
+		height: 100vh;
 
-					background-color: $bg-dark;
+		height: 100dvh;
 
+		width: 100%;
+
+		overflow: hidden;
+
+		position: relative;
+
+		.background-layer {
+			position: absolute;
+
+			top: 0;
+
+			left: 0;
+
+			width: 100%;
+
+			height: 100%;
+
+			background-size: cover;
+
+			background-position: center;
+
+			opacity: 0;
+
+			transition: opacity 1.2s ease-in-out;
+
+			z-index: 0;
+
+			&.visible {
+				opacity: 1;
+			}
+		}
+
+		&::after {
+			content: "";
+
+			position: absolute;
+
+			top: 0;
+
+			left: 0;
+
+			width: 100%;
+
+			height: 100%;
+
+			background: rgba(0, 0, 0, 0.35);
+
+			z-index: 0;
+
+			pointer-events: none;
+		}
+	}
+
+	.hero-content {
+		flex: 1;
+
+		display: flex;
+
+		width: 100%;
+
+		z-index: 1;
+
+		@media (max-width: 768px) {
+			flex-direction: column;
+		}
+	}
+
+	.brand-section {
+		flex: 1;
+
+		display: flex;
+
+		flex-direction: column;
+
+		justify-content: center;
+
+		align-items: center;
+
+		position: relative;
+
+		@media (max-width: 768px) {
+			display: none;
+		}
+
+		.brand-content {
+			text-align: center;
+
+			padding: 2rem;
+
+			.brand-logo {
+				width: 160px;
+
+				height: auto;
+
+				margin-bottom: 1.5rem;
+
+				filter: drop-shadow(0 0 20px rgba($primary, 0.6));
+			}
+
+			h1 {
+				font-size: 3rem;
+
+				font-weight: 800;
+
+				margin: 0;
+
+				color: white;
+
+				text-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
+
+				letter-spacing: -1px;
+
+				max-width: 600px;
+
+				line-height: 1.1;
+			}
+
+			.tagline {
+				color: #e0e0e0;
+
+				font-size: 1.2rem;
+
+				margin: 1rem auto 0;
+
+				max-width: 500px;
+
+				line-height: 1.5;
+
+				text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+			}
+		}
+	}
+
+	.form-section {
+		flex: 1;
+
+		display: flex;
+
+		justify-content: center;
+
+		align-items: center;
+
+		padding: 2rem;
+
+		background: transparent;
+
+		.form-card {
+			width: 100%;
+
+			max-width: 420px;
+
+			padding: 2.5rem;
+
+			background: rgba(24, 27, 33, 0.85);
+
+			backdrop-filter: blur(20px);
+
+			-webkit-backdrop-filter: blur(20px);
+
+			border: 1px solid rgba(255, 255, 255, 0.1);
+
+			border-radius: 20px;
+
+			box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+
+			h2 {
+				font-size: 2rem;
+
+				color: $text-main;
+
+				margin-bottom: 0.5rem;
+
+				font-weight: 700;
+
+				text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+			}
+
+			.subtitle {
+				color: $text-muted;
+
+				margin-bottom: 2.5rem;
+
+				font-size: 1rem;
+			}
+
+			.input-group {
+				margin-bottom: 1.5rem;
+
+				label {
+					display: block;
+
+					margin-bottom: 0.5rem;
+
+					color: $text-muted;
+
+					font-size: 0.85rem;
+
+					font-weight: 600;
+
+					text-transform: uppercase;
 				}
 
-			
-
-				.login-container {
-
-					display: flex;
-
-					flex-direction: column;
-
-					height: 100vh;
-
-					height: 100dvh;
-
+				input {
 					width: 100%;
 
-					overflow: hidden;
+					padding: 1rem;
 
-					position: relative;
+					background: rgba(32, 34, 37, 0.6);
 
-			
+					border: 1px solid rgba(255, 255, 255, 0.1);
 
-					.background-layer {
+					border-radius: 10px;
 
-						position: absolute;
+					color: $text-main;
 
-						top: 0;
+					font-size: 1rem;
 
-						left: 0;
+					box-sizing: border-box;
 
-						width: 100%;
+					transition: all 0.2s;
 
-						height: 100%;
+					&:focus {
+						outline: none;
 
-						background-size: cover;
+						border-color: $primary;
 
-						background-position: center;
-
-						opacity: 0;
-
-						transition: opacity 1.2s ease-in-out;
-
-						z-index: 0;
-
-						&.visible {
-
-							opacity: 1;
-
-						}
-
+						background-color: rgba(32, 34, 37, 0.9);
 					}
-
-			
-
-					&::after {
-
-						content: "";
-
-						position: absolute;
-
-						top: 0;
-
-						left: 0;
-
-						width: 100%;
-
-						height: 100%;
-
-						background: rgba(0, 0, 0, 0.35);
-
-						z-index: 0;
-
-						pointer-events: none;
-
-					}
-
 				}
 
-			
-
-				.hero-content {
-
-					flex: 1;
-
+				.room-input-wrapper {
 					display: flex;
 
-					width: 100%;
+					gap: 0.5rem;
 
-					z-index: 1;
-
-			
-
-					@media (max-width: 768px) {
-
-						flex-direction: column;
-
+					input {
+						flex: 1;
 					}
 
-				}
-
-			
-
-				.brand-section {
-
-					flex: 1;
-
-					display: flex;
-
-					flex-direction: column;
-
-					justify-content: center;
-
-					align-items: center;
-
-					position: relative;
-
-			
-
-					@media (max-width: 768px) {
-
-						display: none;
-
-					}
-
-			
-
-					.brand-content {
-
-						text-align: center;
-
-						padding: 2rem;
-
-			
-
-						.brand-logo {
-
-							width: 160px;
-
-							height: auto;
-
-							margin-bottom: 1.5rem;
-
-							filter: drop-shadow(0 0 20px rgba($primary, 0.6));
-
-						}
-
-			
-
-						h1 {
-
-							font-size: 3rem;
-
-							font-weight: 800;
-
-							margin: 0;
-
-							color: white;
-
-							text-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
-
-							letter-spacing: -1px;
-
-							max-width: 600px;
-
-							line-height: 1.1;
-
-						}
-
-			
-
-						.tagline {
-
-							color: #e0e0e0;
-
-							font-size: 1.2rem;
-
-							margin: 1rem auto 0;
-
-							max-width: 500px;
-
-							line-height: 1.5;
-
-							text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-
-						}
-
-					}
-
-				}
-
-			
-
-				.form-section {
-
-					flex: 1;
-
-					display: flex;
-
-					justify-content: center;
-
-					align-items: center;
-
-					padding: 2rem;
-
-					background: transparent;
-
-			
-
-					.form-card {
-
-						width: 100%;
-
-						max-width: 420px;
-
-						padding: 2.5rem;
-
-						background: rgba(24, 27, 33, 0.85);
-
-						backdrop-filter: blur(20px);
-
-						-webkit-backdrop-filter: blur(20px);
+					.random-btn {
+						background: rgba(32, 34, 37, 0.6);
 
 						border: 1px solid rgba(255, 255, 255, 0.1);
 
-						border-radius: 20px;
+						color: $text-main;
 
-						box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+						padding: 0 1rem;
 
-			
+						border-radius: 10px;
 
-						h2 {
+						cursor: pointer;
 
-							font-size: 2rem;
+						transition: all 0.2s;
 
-							color: $text-main;
+						&:hover {
+							background: rgba(64, 68, 75, 0.8);
+						}
+					}
+				}
+			}
 
-							margin-bottom: 0.5rem;
+			.actions {
+				margin-top: 1.5rem;
+			}
 
-							font-weight: 700;
+			.join-btn {
+				width: 100%;
 
-							text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+				padding: 1rem;
 
+				border: none;
+
+				border-radius: 10px;
+
+				font-size: 1.1rem;
+
+				font-weight: 700;
+
+				cursor: pointer;
+
+				background: $primary;
+
+				color: white;
+
+				transition: all 0.2s;
+
+				&:hover:not(:disabled) {
+					background: $primary-hover;
+
+					transform: translateY(-2px);
+
+					box-shadow: 0 8px 20px rgba($primary, 0.4);
+				}
+
+				&:disabled {
+					opacity: 0.6;
+
+					cursor: not-allowed;
+				}
+			}
+		}
+	}
+
+	.scroll-hint {
+		position: absolute;
+
+		bottom: 2rem;
+
+		left: 50%;
+
+		transform: translateX(-50%);
+
+		display: flex;
+
+		flex-direction: column;
+
+		align-items: center;
+
+		color: white;
+
+		z-index: 1;
+
+		opacity: 0.7;
+
+		font-size: 0.9rem;
+
+		font-weight: 600;
+
+		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+
+		pointer-events: none;
+
+		animation: bounce 2s infinite;
+
+		.arrow {
+			font-size: 1.5rem;
+
+			margin-top: 0.2rem;
+		}
+	}
+
+	.bg-credits {
+		position: absolute;
+
+		bottom: 1rem;
+
+		left: 1rem;
+
+		z-index: 10;
+
+		font-size: 0.8rem;
+
+		color: rgba(255, 255, 255, 0.8);
+
+		background: rgba(0, 0, 0, 0.6);
+
+		padding: 0.5rem 0.8rem;
+
+		border-radius: 6px;
+
+		backdrop-filter: blur(4px);
+
+		border: 1px solid rgba(255, 255, 255, 0.1);
+
+		min-width: 120px;
+
+		.loading-state {
+			display: flex;
+
+			align-items: center;
+
+			gap: 0.5rem;
+
+			padding: 0.2rem 0;
+
+			.spinner {
+				width: 12px;
+
+				height: 12px;
+
+				border: 2px solid rgba(255, 255, 255, 0.3);
+
+				border-top-color: white;
+
+				border-radius: 50%;
+
+				animation: spin 0.8s linear infinite;
+			}
+		}
+
+		.credit-row {
+			display: flex;
+
+			align-items: center;
+
+			gap: 0.5rem;
+		}
+
+		.refresh-btn {
+			background: transparent;
+
+			border: none;
+
+			color: white;
+
+			cursor: pointer;
+
+			font-size: 1rem;
+
+			opacity: 0.8;
+
+			transition: transform 0.3s;
+
+			&:hover {
+				transform: rotate(180deg);
+
+				opacity: 1;
+			}
+		}
+
+		.download-link {
+			color: lighten($primary, 15%);
+
+			text-decoration: none;
+
+			font-weight: bold;
+
+			&:hover {
+				text-decoration: underline;
+			}
+		}
+	}
+
+	.about-section {
+		background-color: $bg-dark;
+
+		padding: 6rem 2rem;
+
+		position: relative;
+
+		z-index: 2;
+
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
+
+		.about-container {
+			max-width: 1000px;
+
+			margin: 0 auto;
+		}
+
+		.extension-notice {
+			margin-bottom: 4rem;
+
+			.notice-card {
+				background: rgba(255, 165, 0, 0.1);
+
+				border: 1px solid rgba(255, 165, 0, 0.3);
+
+				border-radius: 15px;
+
+				padding: 2rem;
+
+				display: flex;
+
+				gap: 2rem;
+
+				align-items: center;
+
+				@media (max-width: 768px) {
+					flex-direction: column;
+
+					text-align: center;
+
+					gap: 1rem;
+				}
+
+				.notice-icon {
+					font-size: 3rem;
+				}
+
+				.notice-content {
+					flex: 1;
+
+					h3 {
+						color: #ffb74d;
+
+						margin: 0 0 0.5rem;
+
+						font-size: 1.5rem;
+					}
+
+					p {
+						color: $text-muted;
+
+						margin-bottom: 1.5rem;
+					}
+
+					.extension-links {
+						display: flex;
+
+						gap: 1rem;
+
+						margin-bottom: 1rem;
+
+						@media (max-width: 768px) {
+							justify-content: center;
 						}
 
-			
+						.ext-btn {
+							display: flex;
 
-						.subtitle {
+							align-items: center;
 
-							color: $text-muted;
+							gap: 0.8rem;
 
-							margin-bottom: 2.5rem;
+							background: rgba(255, 255, 255, 0.1);
 
-							font-size: 1rem;
+							padding: 0.8rem 1.5rem;
 
-						}
-
-			
-
-						.input-group {
-
-							margin-bottom: 1.5rem;
-
-							label {
-
-								display: block;
-
-								margin-bottom: 0.5rem;
-
-								color: $text-muted;
-
-								font-size: 0.85rem;
-
-								font-weight: 600;
-
-								text-transform: uppercase;
-
-							}
-
-							input {
-
-								width: 100%;
-
-								padding: 1rem;
-
-								background: rgba(32, 34, 37, 0.6);
-
-								border: 1px solid rgba(255, 255, 255, 0.1);
-
-								border-radius: 10px;
-
-								color: $text-main;
-
-								font-size: 1rem;
-
-								box-sizing: border-box;
-
-								transition: all 0.2s;
-
-								&:focus {
-
-									outline: none;
-
-									border-color: $primary;
-
-									background-color: rgba(32, 34, 37, 0.9);
-
-								}
-
-							}
-
-							.room-input-wrapper {
-
-								display: flex;
-
-								gap: 0.5rem;
-
-								input {
-
-									flex: 1;
-
-								}
-
-								.random-btn {
-
-									background: rgba(32, 34, 37, 0.6);
-
-									border: 1px solid rgba(255, 255, 255, 0.1);
-
-									color: $text-main;
-
-									padding: 0 1rem;
-
-									border-radius: 10px;
-
-									cursor: pointer;
-
-									transition: all 0.2s;
-
-									&:hover {
-
-										background: rgba(64, 68, 75, 0.8);
-
-									}
-
-								}
-
-							}
-
-						}
-
-			
-
-						.actions {
-
-							margin-top: 1.5rem;
-
-						}
-
-			
-
-						.join-btn {
-
-							width: 100%;
-
-							padding: 1rem;
-
-							border: none;
-
-							border-radius: 10px;
-
-							font-size: 1.1rem;
-
-							font-weight: 700;
-
-							cursor: pointer;
-
-							background: $primary;
+							border-radius: 8px;
 
 							color: white;
 
+							text-decoration: none;
+
+							font-weight: 600;
+
 							transition: all 0.2s;
 
-							&:hover:not(:disabled) {
+							border: 1px solid rgba(255, 255, 255, 0.1);
 
-								background: $primary-hover;
+							img {
+								width: 24px;
+
+								height: 24px;
+							}
+
+							&:hover {
+								background: rgba(255, 255, 255, 0.2);
 
 								transform: translateY(-2px);
-
-								box-shadow: 0 8px 20px rgba($primary, 0.4);
-
 							}
-
-							&:disabled {
-
-								opacity: 0.6;
-
-								cursor: not-allowed;
-
-							}
-
 						}
-
 					}
 
+					.small-hint {
+						font-size: 0.85rem;
+
+						margin: 0;
+
+						opacity: 0.7;
+					}
+				}
+			}
+		}
+
+		.how-it-works {
+			text-align: center;
+
+			margin-bottom: 5rem;
+
+			h2 {
+				font-size: 2.5rem;
+
+				color: white;
+
+				margin-bottom: 3rem;
+
+				font-weight: 800;
+			}
+
+			.steps-grid {
+				display: grid;
+
+				grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+
+				gap: 2rem;
+			}
+
+			.step-card {
+				background: rgba(255, 255, 255, 0.03);
+
+				padding: 2rem;
+
+				border-radius: 15px;
+
+				border: 1px solid rgba(255, 255, 255, 0.05);
+
+				transition: transform 0.3s;
+
+				&:hover {
+					transform: translateY(-5px);
+
+					background: rgba(255, 255, 255, 0.05);
 				}
 
-			
+				.step-number {
+					background: linear-gradient(135deg, $primary, darken($primary, 10%));
 
-				.scroll-hint {
+					width: 40px;
 
-					position: absolute;
+					height: 40px;
 
-					bottom: 2rem;
-
-					left: 50%;
-
-					transform: translateX(-50%);
+					border-radius: 50%;
 
 					display: flex;
 
-					flex-direction: column;
-
 					align-items: center;
+
+					justify-content: center;
+
+					font-weight: bold;
+
+					font-size: 1.2rem;
 
 					color: white;
 
-					z-index: 1;
+					margin: 0 auto 1.5rem;
 
-					opacity: 0.7;
+					box-shadow: 0 4px 10px rgba($primary, 0.4);
+				}
+
+				h3 {
+					color: white;
+
+					margin-bottom: 0.8rem;
+
+					font-size: 1.3rem;
+				}
+
+				p {
+					color: $text-muted;
+
+					line-height: 1.5;
+				}
+			}
+		}
+
+		.about-grid {
+			display: grid;
+
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+
+			gap: 2rem;
+
+			margin-bottom: 5rem;
+		}
+
+		.about-card {
+			background: $bg-panel;
+
+			padding: 2.5rem;
+
+			border-radius: 20px;
+
+			border: 1px solid rgba(255, 255, 255, 0.05);
+
+			transition:
+				transform 0.3s,
+				border-color 0.3s;
+
+			&:hover {
+				transform: translateY(-5px);
+
+				border-color: rgba($primary, 0.3);
+			}
+
+			.icon {
+				font-size: 2.5rem;
+
+				margin-bottom: 1.5rem;
+			}
+
+			h3 {
+				font-size: 1.5rem;
+
+				color: white;
+
+				margin-bottom: 1rem;
+			}
+
+			p {
+				color: $text-muted;
+
+				line-height: 1.6;
+
+				strong {
+					color: lighten($primary, 10%);
+
+					font-weight: 600;
+				}
+			}
+		}
+
+		.project-info {
+			text-align: center;
+
+			background: linear-gradient(145deg, rgba($primary, 0.1), transparent);
+
+			padding: 4rem;
+
+			border-radius: 30px;
+
+			border: 1px solid rgba($primary, 0.1);
+
+			h2 {
+				font-size: 2.5rem;
+
+				color: white;
+
+				margin-bottom: 1.5rem;
+			}
+
+			p {
+				color: $text-muted;
+
+				font-size: 1.1rem;
+
+				line-height: 1.8;
+
+				max-width: 800px;
+
+				margin: 0 auto 2.5rem;
+
+				strong {
+					color: white;
+				}
+			}
+
+			.tech-stack {
+				display: flex;
+
+				flex-wrap: wrap;
+
+				justify-content: center;
+
+				gap: 1rem;
+
+				span {
+					background: rgba(255, 255, 255, 0.05);
+
+					color: white;
+
+					padding: 0.5rem 1.2rem;
+
+					border-radius: 100px;
 
 					font-size: 0.9rem;
 
 					font-weight: 600;
 
-					text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-
-					pointer-events: none;
-
-					animation: bounce 2s infinite;
-
-			
-
-					.arrow {
-
-						font-size: 1.5rem;
-
-						margin-top: 0.2rem;
-
-					}
-
-				}
-
-			
-
-				.bg-credits {
-
-					position: absolute;
-
-					bottom: 1rem;
-
-					left: 1rem;
-
-					z-index: 10;
-
-					font-size: 0.8rem;
-
-					color: rgba(255, 255, 255, 0.8);
-
-					background: rgba(0, 0, 0, 0.6);
-
-					padding: 0.5rem 0.8rem;
-
-					border-radius: 6px;
-
-					backdrop-filter: blur(4px);
-
 					border: 1px solid rgba(255, 255, 255, 0.1);
-
-					min-width: 120px;
-
-			
-
-					.loading-state {
-
-						display: flex;
-
-						align-items: center;
-
-						gap: 0.5rem;
-
-						padding: 0.2rem 0;
-
-						.spinner {
-
-							width: 12px;
-
-							height: 12px;
-
-							border: 2px solid rgba(255, 255, 255, 0.3);
-
-							border-top-color: white;
-
-							border-radius: 50%;
-
-							animation: spin 0.8s linear infinite;
-
-						}
-
-					}
-
-					.credit-row {
-
-						display: flex;
-
-						align-items: center;
-
-						gap: 0.5rem;
-
-					}
-
-					.refresh-btn {
-
-						background: transparent;
-
-						border: none;
-
-						color: white;
-
-						cursor: pointer;
-
-						font-size: 1rem;
-
-						opacity: 0.8;
-
-						transition: transform 0.3s;
-
-						&:hover {
-
-							transform: rotate(180deg);
-
-							opacity: 1;
-
-						}
-
-					}
-
-					.download-link {
-
-						color: lighten($primary, 15%);
-
-						text-decoration: none;
-
-						font-weight: bold;
-
-						&:hover {
-
-							text-decoration: underline;
-
-						}
-
-					}
-
 				}
-
-			
-
-				.about-section {
-
-					background-color: $bg-dark;
-
-					padding: 6rem 2rem;
-
-					position: relative;
-
-					z-index: 2;
-
-					border-top: 1px solid rgba(255, 255, 255, 0.05);
-
-			
-
-					.about-container {
-
-						max-width: 1000px;
-
-						margin: 0 auto;
-
-					}
-
-					
-
-					.how-it-works {
-
-						text-align: center;
-
-						margin-bottom: 5rem;
-
-						
-
-						h2 {
-
-							font-size: 2.5rem;
-
-							color: white;
-
-							margin-bottom: 3rem;
-
-							font-weight: 800;
-
-						}
-
-			
-
-						.steps-grid {
-
-							display: grid;
-
-							grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-
-							gap: 2rem;
-
-						}
-
-			
-
-						.step-card {
-
-							background: rgba(255, 255, 255, 0.03);
-
-							padding: 2rem;
-
-							border-radius: 15px;
-
-							border: 1px solid rgba(255, 255, 255, 0.05);
-
-							transition: transform 0.3s;
-
-							
-
-							&:hover {
-
-								transform: translateY(-5px);
-
-								background: rgba(255, 255, 255, 0.05);
-
-							}
-
-			
-
-							.step-number {
-
-								background: linear-gradient(135deg, $primary, darken($primary, 10%));
-
-								width: 40px;
-
-								height: 40px;
-
-								border-radius: 50%;
-
-								display: flex;
-
-								align-items: center;
-
-								justify-content: center;
-
-								font-weight: bold;
-
-								font-size: 1.2rem;
-
-								color: white;
-
-								margin: 0 auto 1.5rem;
-
-								box-shadow: 0 4px 10px rgba($primary, 0.4);
-
-							}
-
-							
-
-							h3 {
-
-								color: white;
-
-								margin-bottom: 0.8rem;
-
-								font-size: 1.3rem;
-
-							}
-
-							
-
-							p {
-
-								color: $text-muted;
-
-								line-height: 1.5;
-
-							}
-
-						}
-
-					}
-
-			
-
-					.about-grid {
-
-						display: grid;
-
-						grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-
-						gap: 2rem;
-
-						margin-bottom: 5rem;
-
-					}
-
-			
-
-					.about-card {
-
-						background: $bg-panel;
-
-						padding: 2.5rem;
-
-						border-radius: 20px;
-
-						border: 1px solid rgba(255, 255, 255, 0.05);
-
-						transition: transform 0.3s, border-color 0.3s;
-
-			
-
-						&:hover {
-
-							transform: translateY(-5px);
-
-							border-color: rgba($primary, 0.3);
-
-						}
-
-			
-
-						.icon {
-
-							font-size: 2.5rem;
-
-							margin-bottom: 1.5rem;
-
-						}
-
-			
-
-						h3 {
-
-							font-size: 1.5rem;
-
-							color: white;
-
-							margin-bottom: 1rem;
-
-						}
-
-			
-
-						p {
-
-							color: $text-muted;
-
-							line-height: 1.6;
-
-							
-
-							strong {
-
-								color: lighten($primary, 10%);
-
-								font-weight: 600;
-
-							}
-
-						}
-
-					}
-
-			
-
-					.project-info {
-
-						text-align: center;
-
-						background: linear-gradient(145deg, rgba($primary, 0.1), transparent);
-
-						padding: 4rem;
-
-						border-radius: 30px;
-
-						border: 1px solid rgba($primary, 0.1);
-
-			
-
-						h2 {
-
-							font-size: 2.5rem;
-
-							color: white;
-
-							margin-bottom: 1.5rem;
-
-						}
-
-			
-
-						p {
-
-							color: $text-muted;
-
-							font-size: 1.1rem;
-
-							line-height: 1.8;
-
-							max-width: 800px;
-
-							margin: 0 auto 2.5rem;
-
-							
-
-							strong {
-
-								color: white;
-
-							}
-
-						}
-
-			
-
-						.tech-stack {
-
-							display: flex;
-
-							flex-wrap: wrap;
-
-							justify-content: center;
-
-							gap: 1rem;
-
-			
-
-							span {
-
-								background: rgba(255, 255, 255, 0.05);
-
-								color: white;
-
-								padding: 0.5rem 1.2rem;
-
-								border-radius: 100px;
-
-								font-size: 0.9rem;
-
-								font-weight: 600;
-
-								border: 1px solid rgba(255, 255, 255, 0.1);
-
-							}
-
-						}
-
-					}
-
+			}
+		}
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes bounce {
+		0%,
+		20%,
+		50%,
+		80%,
+		100% {
+			transform: translateX(-50%) translateY(0);
+		}
+
+		40% {
+			transform: translateX(-50%) translateY(-10px);
+		}
+
+		60% {
+			transform: translateX(-50%) translateY(-5px);
+		}
+	}
+
+	@media (max-width: 768px) {
+		.brand-section {
+			display: flex;
+
+			flex: 0 0 auto;
+
+			padding: 3rem 0 1rem;
+
+			h1 {
+				font-size: 2.5rem;
+			}
+
+			.brand-logo {
+				width: 100px;
+			}
+
+			.tagline {
+				display: none;
+			}
+		}
+
+		.form-section {
+			padding: 1rem;
+		}
+
+		.about-section {
+			padding: 4rem 1.5rem;
+
+			.project-info {
+				padding: 2rem 1rem;
+
+				h2 {
+					font-size: 1.8rem;
 				}
-
-			
-
-				@keyframes spin {
-
-					to {
-
-						transform: rotate(360deg);
-
-					}
-
-				}
-
-			
-
-				@keyframes bounce {
-
-					0%, 20%, 50%, 80%, 100% {
-
-						transform: translateX(-50%) translateY(0);
-
-					}
-
-					40% {
-
-						transform: translateX(-50%) translateY(-10px);
-
-					}
-
-					60% {
-
-						transform: translateX(-50%) translateY(-5px);
-
-					}
-
-				}
-
-			
-
-				@media (max-width: 768px) {
-
-					.brand-section {
-
-						display: flex;
-
-						flex: 0 0 auto;
-
-						padding: 3rem 0 1rem;
-
-						
-
-						h1 {
-
-							font-size: 2.5rem;
-
-						}
-
-						.brand-logo {
-
-							width: 100px;
-
-						}
-
-						.tagline {
-
-							display: none;
-
-						}
-
-					}
-
-					.form-section {
-
-						padding: 1rem;
-
-					}
-
-					.about-section {
-
-						padding: 4rem 1.5rem;
-
-						
-
-						.project-info {
-
-							padding: 2rem 1rem;
-
-							h2 { font-size: 1.8rem; }
-
-						}
-
-					}
-
-				}
-
-			</style>
+			}
+		}
+	}
+</style>

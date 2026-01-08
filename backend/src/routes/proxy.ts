@@ -64,17 +64,19 @@ const rewriteManifestContent = (
 					/(URI=["']?)([^"'\s>]+)(["']?)/gi,
 					(match, prefix, originalUri, suffix) => {
 						const absoluteUri = resolveAbsoluteUrl(originalUri, manifestBaseUrl);
-						const proxiedUri = createProxiedUrl(absoluteUri, serverBaseUrl, referer);
-						return `${prefix}${proxiedUri}${suffix}`;
+						// For keys/sub-manifests inside EXT-X-KEY, we might still need proxy if they are protected.
+						// But if the goal is direct access, let's return absolute URI.
+						// If it fails, we can revert to proxied URI for keys.
+						return `${prefix}${absoluteUri}${suffix}`;
 					}
 				);
 			}
 			return line;
 		}
 
-		// Handle Segment URLs
+		// Handle Segment URLs (No Proxy, just Absolute URL)
 		const absoluteSegmentUrl = resolveAbsoluteUrl(trimmedLine, manifestBaseUrl);
-		return createProxiedUrl(absoluteSegmentUrl, serverBaseUrl, referer);
+		return absoluteSegmentUrl;
 	});
 
 	return rewrittenLines.join("\n");
@@ -131,6 +133,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
 		// Check if it looks like a manifest based on URL or Content-Type
 		const isManifest =
 			targetUrl.toLowerCase().includes(".m3u8") ||
+			targetUrl.toLowerCase().includes(".txt") ||
 			contentType.includes("mpegurl") ||
 			contentType.includes("apple.mpegurl");
 
