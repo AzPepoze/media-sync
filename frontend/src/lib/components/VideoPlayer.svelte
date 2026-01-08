@@ -8,6 +8,7 @@
 		roomError,
 		emitAction,
 		currentRoomId,
+		SERVER_URL,
 	} from "../stores/socket";
 	// Sub-components
 	import SeekTooltip from "./player/SeekTooltip.svelte";
@@ -20,7 +21,7 @@
 	let peekVideo: HTMLVideoElement;
 	let hls: Hls | null = null;
 	let peekHls: Hls | null = null;
-
+	
 	// State Tracking
 	let currentLoadedUrl = "";
 	let currentLoadedReferer = "";
@@ -45,8 +46,6 @@
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
-
-	const SERVER_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
 	function showControlsTemp() {
 		showControls = true;

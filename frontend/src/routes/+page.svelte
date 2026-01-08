@@ -13,9 +13,11 @@
 	import UserList from "$lib/components/UserList.svelte";
 	import UrlBar from "$lib/components/UrlBar.svelte";
 	import CollectionManager from "$lib/components/CollectionManager.svelte";
+	import TermsOfService from "$lib/components/TermsOfService.svelte";
 
 	let activeTab: "users" | "collections" = "users";
 	let showSidebar = false;
+	let tosAccepted = false;
 
 	onDestroy(() => {
 		cleanupSocket();
@@ -28,7 +30,13 @@
 	function toggleSidebar() {
 		showSidebar = !showSidebar;
 	}
+
+	function handleTosAccept() {
+		tosAccepted = true;
+	}
 </script>
+
+<TermsOfService onAccept={handleTosAccept} />
 
 {#if !$isJoined}
 	<WelcomeScreen />
