@@ -383,6 +383,7 @@
 			emitAction("buffering_end", $currentRoomId);
 		}
 
+		if (isPlaying) return;
 		isPlaying = true;
 
 		// Use isSyncing check only for Youtube
@@ -395,6 +396,7 @@
 	}
 
 	function onPause() {
+		if (!isPlaying) return;
 		isPlaying = false;
 
 		const blockSync = isYoutube ? isSyncing : false;
