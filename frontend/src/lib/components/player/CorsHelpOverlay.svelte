@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from "svelte";
 	import { fade } from "svelte/transition";
+	import ExtensionGuide from "../ExtensionGuide.svelte";
 
 	const dispatch = createEventDispatcher();
 </script>
@@ -8,46 +9,22 @@
 <div class="overlay-container" transition:fade={{ duration: 200 }}>
 	<div class="modal-card">
 		<div class="icon">🚧</div>
-		<h2>Video Blocked (CORS)</h2>
-		<p>
-			This video cannot be played directly because the source website blocks external players. <br />
-			To fix this, please install <strong>"CORS Unblock"</strong> to allow the browser to load the video.
-		</p>
+		<h2>You need to install an extension!</h2>
+		<p>To play this video, you need to unblock browser restrictions.<br />Sorry for the inconvenience.</p>
 
-		<div class="extension-links">
-			<a
-				href="https://chromewebstore.google.com/detail/cors-unblock/lfhmikememgdcahcdlaciloancbhjino"
-				target="_blank"
-				class="ext-btn chrome"
-			>
-				<img
-					src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg"
-					alt="Chrome"
-				/>
-				Chrome / Edge
-			</a>
-			<a
-				href="https://addons.mozilla.org/en-US/firefox/addon/cors-unblock/"
-				target="_blank"
-				class="ext-btn firefox"
-			>
-				<img
-					src="https://upload.wikimedia.org/wikipedia/commons/a/a0/Firefox_logo%2C_2019.svg"
-					alt="Firefox"
-				/>
-				Firefox
-			</a>
+		<div class="cors-info">
+			<div class="info-content">
+				<span class="badge">Why?</span>
+				<span
+					>The video server blocks external players (CORS).<br />This extension (CORS Unblock)
+					<strong>removes that block</strong>.</span
+				>
+			</div>
 		</div>
 
-		<div class="help-text">
-			<small>
-				* Click the extension icon to <strong>activate it (turn it colored)</strong> before clicking Retry.<br
-				/>
-				Please disable it after using this site.
-			</small>
-		</div>
+		<ExtensionGuide />
 
-		<button class="retry-btn" on:click={() => dispatch("retry")}> ↻ I installed it, Retry </button>
+		<button class="retry-btn" on:click={() => dispatch("retry")}> ↻ I'm ready, Retry </button>
 	</div>
 </div>
 
@@ -58,7 +35,7 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
-		background: rgba(0, 0, 0, 0.85);
+		background: rgba(0, 0, 0, 0.9);
 		backdrop-filter: blur(8px);
 		display: flex;
 		justify-content: center;
@@ -73,62 +50,54 @@
 		padding: 2rem;
 		border-radius: 16px;
 		text-align: center;
-		max-width: 450px;
+		max-width: 550px;
+		width: 100%;
 		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
 
 		.icon {
-			font-size: 3rem;
-			margin-bottom: 1rem;
+			font-size: 2.5rem;
+			margin-bottom: 0.5rem;
 		}
 
 		h2 {
 			color: #ffb74d;
-			margin: 0 0 1rem;
-			font-size: 1.5rem;
+			margin: 0 0 0.5rem;
+			font-size: 1.4rem;
 		}
 
 		p {
 			color: #b9bbbe;
-			margin-bottom: 1.5rem;
-			line-height: 1.5;
+			margin-bottom: 1rem;
+			font-size: 0.95rem;
 		}
 
-		.extension-links {
-			display: flex;
-			gap: 1rem;
-			justify-content: center;
+		.cors-info {
+			background: rgba(88, 101, 242, 0.1);
+			border: 1px solid rgba(88, 101, 242, 0.3);
+			border-radius: 8px;
+			padding: 0.8rem;
 			margin-bottom: 1.5rem;
-			flex-wrap: wrap;
+			font-size: 0.85rem;
+			color: #dcddde;
+			display: block; /* changed from flex to handle content better */
+			text-align: center;
 
-			.ext-btn {
+			.info-content {
 				display: flex;
 				align-items: center;
-				gap: 0.5rem;
-				background: rgba(255, 255, 255, 0.08);
-				padding: 0.6rem 1rem;
-				border-radius: 8px;
-				color: white;
-				text-decoration: none;
-				font-size: 0.9rem;
-				font-weight: 600;
-				border: 1px solid rgba(255, 255, 255, 0.1);
-				transition: all 0.2s;
-
-				img {
-					width: 20px;
-					height: 20px;
-				}
-
-				&:hover {
-					background: rgba(255, 255, 255, 0.15);
-					transform: translateY(-2px);
-				}
+				gap: 0.8rem;
+				justify-content: center;
 			}
-		}
 
-		.help-text {
-			margin-bottom: 1.5rem;
-			color: #72767d;
+			.badge {
+				background: #5865f2;
+				color: white;
+				font-weight: bold;
+				padding: 0.2rem 0.5rem;
+				border-radius: 4px;
+				font-size: 0.75rem;
+				text-transform: uppercase;
+			}
 		}
 
 		.retry-btn {

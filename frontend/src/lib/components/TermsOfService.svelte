@@ -32,43 +32,51 @@
 
 			<div class="tos-content">
 				<p>Welcome to <strong>Media Sync</strong>. Please read and accept our terms before you continue:</p>
-				
+
 				<ul>
 					<li>
-						<strong>Purpose:</strong> Media Sync is a tool designed solely for <strong>Synchronized Video Playback</strong>, 
-						allowing users to watch videos together in real-time.
+						<strong>Purpose:</strong> Media Sync is a tool designed solely for
+						<strong>Synchronized Video Playback</strong>, allowing users to watch videos together in
+						real-time.
 					</li>
 					<li>
-						<strong>Disclaimer:</strong> The developer <strong>has no affiliation</strong> with the video content played through this system, 
-						whether from YouTube, Twitch, or any other external sources.
+						<strong>Disclaimer:</strong> The developer <strong>has no affiliation</strong> with the video
+						content played through this system, whether from YouTube, Twitch, or any other external sources.
 					</li>
 					<li>
-						<strong>User Responsibility:</strong> Users are solely responsible for the content they choose to play and must comply 
-						with copyright laws and the terms of the respective video platforms.
+						<strong>User Responsibility:</strong> Users are solely responsible for the content they choose
+						to play and must comply with copyright laws and the terms of the respective video platforms.
 					</li>
 				</ul>
 
 				<p class="disclaimer-box">
-					By clicking the button below, you acknowledge that this system is merely a "video player" that synchronizes playback time.
+					By clicking the button below, you acknowledge that this system is merely a "video player" that
+					synchronizes playback time.
 				</p>
 			</div>
 
 			<div class="tos-actions">
-				<button class="accept-btn" on:click={accept}>
-					I understand and accept the terms
-				</button>
+				<button class="accept-btn" on:click={accept}> I understand and accept the terms </button>
 			</div>
 		</div>
 	</div>
 {/if}
 
 <style lang="scss">
+	:global(body) {
+		overflow: hidden;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
 	.tos-overlay {
 		position: fixed;
 		top: 0;
 		left: 0;
-		width: 100%;
-		height: 100%;
+		right: 0;
+		bottom: 0;
 		background: rgba(0, 0, 0, 0.85);
 		backdrop-filter: blur(8px);
 		z-index: 9999;
@@ -94,7 +102,7 @@
 		flex-shrink: 0;
 		padding: 2rem 2rem 1rem;
 		text-align: center;
-		
+
 		.icon {
 			font-size: 3rem;
 			margin-bottom: 0.5rem;
@@ -138,7 +146,7 @@
 		ul {
 			padding-left: 1.2rem;
 			margin-bottom: 1.5rem;
-			
+
 			li {
 				margin-bottom: 0.8rem;
 				&::marker {
@@ -165,7 +173,7 @@
 		padding: 1.5rem 2rem 2rem;
 		background: #181b21;
 		border-top: 1px solid rgba(255, 255, 255, 0.05);
-		
+
 		.accept-btn {
 			width: 100%;
 			padding: 1rem;
@@ -191,22 +199,32 @@
 	}
 
 	@media (max-width: 480px) {
+		.tos-overlay {
+			padding: 10px;
+		}
+
 		.tos-modal {
+			width: 100%;
+			max-width: 100%;
 			max-height: 90vh;
 			border-radius: 20px;
 		}
-		
+
 		.tos-header {
 			padding: 1.5rem 1.5rem 0.5rem;
-			h2 { font-size: 1.25rem; }
-			.icon { font-size: 2.5rem; }
+			h2 {
+				font-size: 1.25rem;
+			}
+			.icon {
+				font-size: 2.5rem;
+			}
 		}
-		
+
 		.tos-content {
 			padding: 0 1.5rem;
 			font-size: 0.85rem;
 		}
-		
+
 		.tos-actions {
 			padding: 1rem 1.5rem 1.5rem;
 		}

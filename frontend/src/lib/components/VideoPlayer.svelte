@@ -24,7 +24,7 @@
 	// Elements & Refs
 	let videoElement: HTMLVideoElement;
 	let peekVideo: HTMLVideoElement;
-	let ytComponent: YoutubeEmbed; // Reference to child component
+	let ytComponent: YoutubeEmbed;
 
 	let hls: Hls | null = null;
 	let peekHls: Hls | null = null;
@@ -37,6 +37,7 @@
 	// Sync State
 	let isRemoteActionActive = false;
 	let isRemoteSeeking = false;
+	let isSyncing = false; // Flag to prevent loopback echoes
 	let localIsBuffering = false;
 
 	// Error State
@@ -60,7 +61,6 @@
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
 
-	// --- Helper to init Peek HLS (used in hover) ---
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
 		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
@@ -74,7 +74,6 @@
 		}
 	}
 
-	// --- Main Load Logic ---
 	function loadCurrentVideo() {
 		if (!$roomState?.videoUrl) return;
 
@@ -102,7 +101,7 @@
 		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
 			loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
 		} else {
-			// --- Sync Check (Drift Correction) ---
+			// --- Sync Check ---
 			let currentPlayerTime = 0;
 			if (isYoutube && ytComponent) currentPlayerTime = ytComponent.getCurrentTime();
 			else if (!isYoutube && videoElement) currentPlayerTime = videoElement.currentTime;
@@ -111,33 +110,39 @@
 			if (diff > 2) {
 				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
 				isRemoteActionActive = true;
+				isSyncing = true;
 				if (isYoutube && ytComponent) ytComponent.seekTo(targetTime);
 				else if (videoElement) videoElement.currentTime = targetTime;
-				setTimeout(() => (isRemoteActionActive = false), 2000);
+				setTimeout(() => {
+					isRemoteActionActive = false;
+					isSyncing = false;
+				}, 2000);
 			}
 
-			// Play/Pause Sync
 			const shouldBePlaying = $roomState.isPlaying;
 			let amIPlaying = false;
 
 			if (isYoutube && ytComponent) {
 				const state = ytComponent.getPlayerState();
-				amIPlaying = state === 1; // 1 = Playing
+				amIPlaying = state === 1;
 			} else if (videoElement) {
 				amIPlaying = !videoElement.paused;
 			}
 
 			if (shouldBePlaying && !amIPlaying && !$isWaitingForOthers && !localIsBuffering) {
+				isSyncing = true;
 				if (isYoutube && ytComponent) ytComponent.play();
 				else if (videoElement) videoElement.play().catch(() => {});
+				setTimeout(() => (isSyncing = false), 500);
 			} else if (!shouldBePlaying && amIPlaying) {
+				isSyncing = true;
 				if (isYoutube && ytComponent) ytComponent.pause();
 				else if (videoElement) videoElement.pause();
+				setTimeout(() => (isSyncing = false), 500);
 			}
 		}
 	}
 
-	// --- Reactivity ---
 	$: if ($roomState) loadCurrentVideo();
 
 	$: if ($socket) {
@@ -152,7 +157,6 @@
 		});
 
 		$socket.on("player_action", (data: { action: string; time: number }) => {
-			// Guard: Player must exist
 			if (!videoElement && !ytComponent) return;
 
 			let playerTime = 0;
@@ -161,8 +165,16 @@
 
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
+			// Set Syncing flag only for Youtube to prevent echo
+			if (isYoutube) isSyncing = true;
+			isRemoteActionActive = true;
+
 			if (data.action === "seek") {
-				if (Math.abs(playerTime - data.time) < 0.5) return;
+				if (Math.abs(playerTime - data.time) < 0.5) {
+					isSyncing = false;
+					isRemoteActionActive = false;
+					return;
+				}
 
 				isRemoteSeeking = true;
 				if (isYoutube && ytComponent) ytComponent.seekTo(data.time);
@@ -172,15 +184,17 @@
 				emitAction("buffering_start", $currentRoomId);
 
 				setTimeout(() => {
-					// Manually trigger seeked logic after delay to ensure sync
 					if (isYoutube) onSeeked();
 					else if (Math.abs(videoElement.currentTime - data.time) < 0.2) onSeeked();
 				}, 1000);
+				// Keep isSyncing true a bit longer for seek
+				setTimeout(() => {
+					isRemoteActionActive = false;
+					isSyncing = false;
+				}, 1500);
 				return;
 			}
 
-			isRemoteActionActive = true;
-			// Sync time if difference is large
 			const diff = Math.abs(playerTime - data.time);
 			if (diff > 0.5) {
 				if (isYoutube && ytComponent) ytComponent.seekTo(data.time);
@@ -199,14 +213,17 @@
 				if (isYoutube && ytComponent) ytComponent.pause();
 				else if (videoElement) videoElement.pause();
 			}
+
 			setTimeout(() => {
 				isRemoteActionActive = false;
-			}, 800);
+				isSyncing = false;
+			}, 1000);
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!videoElement && !ytComponent) return;
 			isRemoteActionActive = true;
+			isSyncing = true;
 
 			let playerPaused = true;
 			if (isYoutube && ytComponent) playerPaused = ytComponent.getPlayerState() !== 1;
@@ -231,7 +248,8 @@
 			}
 			setTimeout(() => {
 				isRemoteActionActive = false;
-			}, 200);
+				isSyncing = false;
+			}, 500);
 		});
 	}
 
@@ -252,7 +270,6 @@
 
 		const ytId = getYoutubeId(url);
 
-		// --- Cleanup Previous State ---
 		if (videoElement) {
 			videoElement.pause();
 			videoElement.removeAttribute("src");
@@ -263,21 +280,13 @@
 			hls = null;
 		}
 
-		// --- Mode Switching ---
 		if (ytId) {
 			isYoutube = true;
-			// Give svelte a moment to mount the component if it wasn't there
-			setTimeout(() => {
-				// YoutubeEmbed handles its own init via props/bind,
-				// but since we are remounting/changing ID, Svelte reactivity handles passing `videoId`
-				// We just need to wait for 'ready' event from it.
-			}, 0);
 			return;
 		} else {
 			isYoutube = false;
 		}
 
-		// --- HTML5 / HLS Load ---
 		const videoUrl = getProxyUrl(url, referer);
 
 		if (Hls.isSupported() && isHlsSource(url)) {
@@ -346,35 +355,16 @@
 		}
 	}
 
-	// --- Handlers (Universal) ---
-
-		function onYoutubeReady(e: CustomEvent) {
-
-			console.log("[Youtube] Ready");
-
-			isVideoChanging.set(false);
-
-			duration = e.detail.duration;
-
-			localIsBuffering = false;
-
-			emitAction("buffering_end", $currentRoomId);
-
-			setTimeout(() => { isRemoteActionActive = false; }, 2000);
-
-		}
-
-	
-
-		function onYoutubeStateChange(e: CustomEvent) {
-
-			// e.detail is the state code directly forwarded from YoutubeEmbed "play", "pause" etc events
-
-			// actually YoutubeEmbed dispatches specific events like "play", "pause", "waiting".
-
-			// We need to listen to those.
-
-		}
+	function onYoutubeReady(e: CustomEvent) {
+		console.log("[Youtube] Ready");
+		isVideoChanging.set(false);
+		duration = e.detail.duration;
+		localIsBuffering = false;
+		emitAction("buffering_end", $currentRoomId);
+		setTimeout(() => {
+			isRemoteActionActive = false;
+		}, 2000);
+	}
 
 	function onYoutubeTimeUpdate(e: CustomEvent) {
 		currentTime = e.detail.currentTime;
@@ -391,7 +381,6 @@
 	}
 
 	function onPlay() {
-		// If youtube starts playing, force remove loading overlay immediately
 		if (isYoutube) {
 			console.log("[Youtube] Playing -> Clearing Buffering");
 			isVideoChanging.set(false);
@@ -400,7 +389,11 @@
 		}
 
 		isPlaying = true;
-		if (!isRemoteActionActive && !isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
+
+		// Use isSyncing check only for Youtube
+		const blockSync = isYoutube ? isSyncing : false;
+
+		if (!isRemoteActionActive && !isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
 			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
 			emitAction("play", { roomId: $currentRoomId, time: t });
 		}
@@ -408,7 +401,10 @@
 
 	function onPause() {
 		isPlaying = false;
-		if (!isRemoteActionActive && !isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
+
+		const blockSync = isYoutube ? isSyncing : false;
+
+		if (!isRemoteActionActive && !isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
 			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
 			emitAction("pause", { roomId: $currentRoomId, time: t });
 		}
@@ -428,7 +424,10 @@
 			isRemoteSeeking = false;
 			return;
 		}
-		if (!isRemoteActionActive) {
+
+		const blockSync = isYoutube ? isSyncing : false;
+
+		if (!isRemoteActionActive && !blockSync) {
 			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
 			emitAction("seek", { roomId: $currentRoomId, time: t });
 		}
@@ -479,7 +478,6 @@
 		}
 	}
 
-	// --- Control Actions ---
 	function togglePlay() {
 		if (isYoutube && ytComponent) {
 			isPlaying ? ytComponent.pause() : ytComponent.play();
@@ -531,8 +529,6 @@
 	}
 
 	function toggleFullscreen() {
-		const wrapper = videoElement?.parentElement || ytComponent?.$$.root?.parentElement;
-		// Note: $$.root access is internal Svelte, better to rely on container div class
 		const container = document.querySelector(".player-container");
 		if (!document.fullscreenElement) container?.requestFullscreen();
 		else document.exitFullscreen();
@@ -606,7 +602,7 @@
 
 <div
 	class="player-container"
-    role="application"
+	role="application"
 	class:hide-cursor={hideCursor}
 	on:mousemove={showControlsTemp}
 	on:mouseleave={() => (showControls = false)}
@@ -690,15 +686,18 @@
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div
 			class="progress-bar-container"
-            role="slider"
-            tabindex="0"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow={duration ? (currentTime / duration) * 100 : 0}
+			role="slider"
+			tabindex="0"
+			aria-valuemin="0"
+			aria-valuemax="100"
+			aria-valuenow={duration ? (currentTime / duration) * 100 : 0}
 			on:mousemove={handleSeekHover}
 			on:mouseleave={() => (isHoveringSeek = false)}
 			on:click={handleSeek}
-            on:keydown={(e) => { if(e.key === 'ArrowRight') skipTime(5); if(e.key === 'ArrowLeft') skipTime(-5); }}
+			on:keydown={(e) => {
+				if (e.key === "ArrowRight") skipTime(5);
+				if (e.key === "ArrowLeft") skipTime(-5);
+			}}
 		>
 			<div class="progress-bg"></div>
 			<div class="progress-buffered" style="width: {buffered}%"></div>
@@ -742,7 +741,8 @@
 			cursor: none;
 		}
 
-		video {
+		video,
+		.youtube-wrapper {
 			width: 100%;
 			height: 100%;
 			object-fit: contain;
@@ -756,15 +756,6 @@
 				visibility: hidden;
 				pointer-events: none;
 			}
-		}
-		.youtube-wrapper {
-			width: 100%;
-			height: 100%;
-			object-fit: contain;
-			aspect-ratio: 16/9;
-			position: absolute;
-			top: 0;
-			left: 0;
 		}
 
 		.youtube-wrapper {
