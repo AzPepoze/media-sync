@@ -194,17 +194,7 @@
 	// Socket Listeners
 	//-------------------------------------------------------
 	$: if ($roomState) loadCurrentVideo();
-
-	// React to waiting state changes
-	$: if (player && player.isReady) {
-		if ($isWaitingForOthers && player.isPlaying) {
-			console.log("[Sync] Others buffering, pausing playback");
-			player.pause();
-		} else if (!$isWaitingForOthers && !localIsBuffering && $roomState.isPlaying && !player.isPlaying) {
-			console.log("[Sync] Others ready, resuming playback");
-			player.play();
-		}
-	}
+	$: if ($isWaitingForOthers !== undefined) loadCurrentVideo();
 
 	$: if ($socket) {
 		$socket.off("connect");
