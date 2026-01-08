@@ -267,6 +267,17 @@
 	$: if ($roomState) loadCurrentVideo();
 	$: if ($isWaitingForOthers !== undefined) loadCurrentVideo();
 
+	// Helper: sync time if drift is significant
+	function syncTimeIfNeeded(targetTime: number) {
+		if (!player) return;
+		const currentPlayerTime = player.getCurrentTime();
+		const diff = Math.abs(currentPlayerTime - targetTime);
+		if (diff > 0.5) {
+			console.log("[Player] Syncing time, diff:", diff.toFixed(2));
+			player.seek(targetTime);
+		}
+	}
+
 	// Track our handlers so we can remove only our own, not the socket store's
 	let playerActionHandler: ((data: { action: string; time: number }) => void) | null = null;
 	let connectHandler: (() => void) | null = null;
@@ -311,10 +322,11 @@
 				return;
 			}
 
-			// For pause during seek - just pause locally, don't emit anything
+			// For pause - pause and sync time
 			if (data.action === "pause") {
 				console.log("[Player] Pause action received, pausing player");
 				player.pause(true); // silent=true, don't emit
+				syncTimeIfNeeded(data.time);
 				return;
 			}
 
@@ -325,12 +337,7 @@
 				// Clear seeking flags when play is received
 				isSeeking = false;
 				isRemoteSeeking = false;
-				// Sync time if drift is significant
-				const diff = Math.abs(playerTime - data.time);
-				if (diff > 0.5) {
-					console.log("[Player] Syncing time before play, diff:", diff.toFixed(2));
-					player.seek(data.time);
-				}
+				syncTimeIfNeeded(data.time);
 				player.play(true); // silent=true, don't emit
 				return;
 			}
