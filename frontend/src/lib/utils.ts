@@ -4,3 +4,7 @@ export function formatTime(s: number) {
 	const sec = Math.floor(s % 60);
 	return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
 }
+
+export async function sleep(ms: number) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}

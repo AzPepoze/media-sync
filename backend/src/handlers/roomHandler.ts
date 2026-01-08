@@ -34,14 +34,22 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 		const newUser: User = {
 			id: socket.id,
 			nickname: nickname || `User ${socket.id.substring(0, 4)}`,
-			isBuffering: false,
+			isBuffering: true,
 		};
 		roomUsers[roomId].push(newUser);
 
+		if (rooms[roomId].isPlaying && rooms[roomId].lastUpdated) {
+			const timePassed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
+			rooms[roomId].currentTime += timePassed;
+			rooms[roomId].lastUpdated = Date.now();
+		}
+
 		// Send current room state to the new user
+		console.log(`Syncing state to ${nickname} (${socket.id}) in room ${roomId}`);
 		socket.emit("sync_state", rooms[roomId]);
 
 		// Broadcast new user list to everyone in room
+		console.log(`Updating user list in room ${roomId}`);
 		io.to(roomId).emit("room_users", roomUsers[roomId]);
 
 		// Check buffering status

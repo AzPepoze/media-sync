@@ -13,8 +13,6 @@
 	import { getYoutubeId, getProxyUrl, isHlsSource } from "../utils/media";
 	import { HTML5Player, YouTubePlayer, type BasePlayer } from "../utils/players";
 	import Hls from "hls.js";
-	// Needed for Peek only now
-
 	// Sub-components
 	import SeekTooltip from "./player/SeekTooltip.svelte";
 	import Controls from "./player/Controls.svelte";
@@ -31,7 +29,6 @@
 
 	// Player Strategy Instance
 	let player: BasePlayer | null = null;
-
 	let peekHls: Hls | null = null;
 
 	// State Tracking
@@ -42,24 +39,8 @@
 	// Sync State
 	let syncLockUntil = 0;
 	let isRemoteSeeking = false;
-	let isSyncing = false; // Flag to prevent loopback echoes
+	let isSyncing = false;
 	let localIsBuffering = false;
-
-	function setSyncState(isActive: boolean, duration = 1500) {
-		if (isActive) {
-			syncLockUntil = Date.now() + duration;
-			isSyncing = true; // Still keep for UI or other checks if needed
-		} else {
-			syncLockUntil = 0;
-			isSyncing = false;
-		}
-	}
-
-	function isSyncLocked() {
-		const locked = Date.now() < syncLockUntil;
-		if (!locked && isSyncing) isSyncing = false; // Auto-clear flag
-		return locked;
-	}
 
 	// Error State
 	let hasError = false;
@@ -82,24 +63,18 @@
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
 
-	function initPeekHls() {
-		if (!currentLoadedUrl || peekHls) return;
-		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
-		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
-			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, startLevel: 0 });
-			peekHls.loadSource(videoUrl);
-			peekHls.attachMedia(peekVideo);
-		} else if (peekVideo) {
-			peekVideo.src = videoUrl;
-			peekVideo.load();
-		}
-	}
+	//-------------------------------------------------------
+	// Core Logic: Load Video
+	//-------------------------------------------------------
 
 	async function loadCurrentVideo() {
-		if (!$roomState?.videoUrl) return;
+		if (!$roomState?.videoUrl) {
+			emitAction("buffering_end", $currentRoomId);
+			return;
+		}
 
+		localIsBuffering = true;
 		const ytId = getYoutubeId($roomState.videoUrl);
-
 		const isDirectLink =
 			ytId ||
 			isHlsSource($roomState.videoUrl) ||
@@ -107,45 +82,111 @@
 			$roomState.videoUrl.includes("googlevideo.com");
 
 		if (!isDirectLink) {
-			console.log("[Player] URL skipping load.");
+			console.log("[Player] URL format not supported or skipping.");
 			return;
 		}
 
 		const stateReferer = $roomState.referer || "";
-
 		let targetTime = $roomState.currentTime;
+
+		// Compensation for latency
 		if ($roomState.isPlaying && $roomState.lastUpdated) {
 			const elapsed = (Date.now() - $roomState.lastUpdated) / 1000;
 			targetTime += elapsed;
 		}
 
 		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
-			loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
+			await loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
 		} else {
-			// --- Sync Check ---
-			if (isSyncLocked()) return;
+			if (!player || !player.isReady) return;
 
-			let currentPlayerTime = player ? player.getCurrentTime() : 0;
-
+			const currentPlayerTime = player.getCurrentTime();
 			const diff = Math.abs(currentPlayerTime - targetTime);
+
 			if (diff > 2) {
 				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
-				setSyncState(true, 2000);
-				player?.seek(targetTime);
+				player.seek(targetTime);
 			}
 
+			// Play/Pause State Sync
 			const shouldBePlaying = $roomState.isPlaying;
-			// Check internal state match
-			if (shouldBePlaying && !isPlaying && !$isWaitingForOthers && !localIsBuffering) {
-				setSyncState(true, 1500);
-				player?.play();
-			} else if (!shouldBePlaying && isPlaying) {
-				setSyncState(true, 1500);
-				player?.pause();
+			const isActuallyPlaying = isPlaying; // Trust internal state over DOM sometimes
+
+			// Only intervene if there is a mismatch AND we are not buffering/waiting
+			if (shouldBePlaying && !isActuallyPlaying && !$isWaitingForOthers && !localIsBuffering) {
+				player.play();
+				isPlaying = true;
+			} else if (!shouldBePlaying && isActuallyPlaying) {
+				player.pause();
+				isPlaying = false;
 			}
 		}
 	}
 
+	async function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
+		localIsBuffering = true;
+		emitAction("buffering_start", $currentRoomId);
+
+		// Reset States
+		hasError = false;
+		showCorsHelp = false;
+		errorMessage = "";
+		currentTime = startTime;
+		buffered = 0;
+		isPlaying = shouldPlay;
+		retryCount = 0;
+		currentLoadedUrl = url;
+		currentLoadedReferer = referer;
+
+		const ytId = getYoutubeId(url);
+
+		// Determine Player Type change
+		const targetType = ytId ? "youtube" : "html5";
+
+		// Cleanup if type mismatches
+		if (player && player.type !== targetType) {
+			player.destroy();
+			player = null;
+		}
+
+		if (ytId) {
+			isYoutube = true;
+			await tick();
+
+			if (!player && ytComponent) {
+				player = new YouTubePlayer(ytComponent);
+			}
+		} else {
+			isYoutube = false;
+			await tick();
+
+			if (!player) {
+				player = new HTML5Player(videoElement, {
+					onManifestParsed: () => {
+						isVideoChanging.set(false);
+					},
+					onError: (type, details, fatal) => {
+						if (details === "manifestLoadError" || details === "fragLoadError") {
+							showCorsHelp = true;
+							localIsBuffering = false;
+							emitAction("buffering_end", $currentRoomId);
+						} else if (fatal) {
+							showError(`Video Error: ${details}`);
+						}
+					},
+				});
+			}
+
+			// Load Content
+			if (player instanceof HTML5Player) {
+				await player.load(url, referer, startTime, shouldPlay);
+			}
+		}
+	}
+
+	//-------------------------------------------------------
+	// Socket Listeners
+	//-------------------------------------------------------
 	$: if ($roomState) loadCurrentVideo();
 
 	$: if ($socket) {
@@ -161,53 +202,41 @@
 
 		$socket.on("player_action", (data: { action: string; time: number }) => {
 			if (!player) return;
-
-			let playerTime = player.getCurrentTime();
-
+			const playerTime = player.getCurrentTime();
 			console.log("[Player] Action received:", data.action, "at", data.time);
-
-			// Activate Sync State
-			setSyncState(true, 1500);
 
 			if (data.action === "seek") {
 				if (Math.abs(playerTime - data.time) < 0.5) {
-					setSyncState(false);
 					return;
 				}
-
-				isRemoteSeeking = true;
-				player.seek(data.time);
-
-				localIsBuffering = true;
 				emitAction("buffering_start", $currentRoomId);
+				isRemoteSeeking = true;
+				localIsBuffering = true;
 
-				setTimeout(() => {
-					onSeeked();
-				}, 1000);
-				// Keep Sync active a bit longer for seek
-				setSyncState(true, 2000);
+				player.seek(data.time);
+				onSeeked();
 				return;
 			}
 
+			// Sync time if drift is significant
 			const diff = Math.abs(playerTime - data.time);
 			if (diff > 0.5) {
 				player.seek(data.time);
 			}
 
 			if (data.action === "play") {
-				isPlaying = true; // Optimistic update
+				isPlaying = true;
 				player.play();
 			} else if (data.action === "pause") {
-				isPlaying = false; // Optimistic update
+				isPlaying = false;
 				player.pause();
 			}
-
-			setSyncState(true, 1500);
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
 			if (!player) return;
-			setSyncState(true, 1000);
+
+			console.log("[Player] Room buffering status:", isBuffering, "Room playing:", $roomState.isPlaying);
 
 			if (isBuffering) {
 				if (isPlaying) {
@@ -215,96 +244,31 @@
 					isPlaying = false;
 				}
 			} else if ($roomState.isPlaying && !localIsBuffering) {
+				console.log("[Player] Room buffering ended, resuming playback.");
+				// Resume if room is playing and we aren't the one buffering
 				if (!isPlaying) {
 					player.play();
 					isPlaying = true;
 				}
 			}
-			setSyncState(true, 1000);
 		});
 	}
 
-	async function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
-		localIsBuffering = true;
-		emitAction("buffering_start", $currentRoomId);
-		hasError = false;
-		showCorsHelp = false;
-		errorMessage = "";
-		currentTime = startTime;
-		buffered = 0;
-		isPlaying = shouldPlay;
-		retryCount = 0;
-
-		currentLoadedUrl = url;
-		currentLoadedReferer = referer;
-
-		const ytId = getYoutubeId(url);
-
-		// Clean up old player
-		if (player && player.type === (ytId ? "html5" : "youtube")) {
-			player.destroy();
-			player = null;
-		}
-
-		if (ytId) {
-			isYoutube = true;
-			// Wait for Svelte to mount YoutubeEmbed
-			await tick();
-			// Re-instantiate player wrapper if needed or update existing
-			if (!player || player.type !== "youtube") {
-				// We rely on YoutubeEmbed to fire 'ready' event to confirm it's usable,
-				// but we can wrap it now if component instance is bound
-				if (ytComponent) {
-					player = new YouTubePlayer(ytComponent);
-				}
-			}
-			// For YouTube, the component reactivity handles the ID change via prop `videoId`
-			// We just wait for 'ready' event
-			return;
-		} else {
-			isYoutube = false;
-			await tick();
-
-			if (!player || player.type !== "html5") {
-				player = new HTML5Player(
-					videoElement,
-					() => {
-						// onManifestParsed / Loaded
-						isVideoChanging.set(false);
-						setSyncState(true, 2000);
-					},
-					(type, details, fatal) => {
-						// onError
-						// Reuse existing error logic logic roughly...
-						if (details === "manifestLoadError" || details === "fragLoadError") {
-							showCorsHelp = true;
-							localIsBuffering = false;
-							emitAction("buffering_end", $currentRoomId);
-						} else if (fatal) {
-							showError(`Video Error: ${details}`);
-						}
-					}
-				);
-			}
-			// Cast to HTML5Player to access specific load method
-			if (player instanceof HTML5Player) {
-				player.load(url, referer, startTime, shouldPlay);
-			}
-		}
-	}
+	//-------------------------------------------------------
+	// Event Handlers
+	//-------------------------------------------------------
 
 	function onYoutubeReady(e: CustomEvent) {
 		console.log("[Youtube] Ready");
-		// Ensure player wrapper is set
 		if (!player && ytComponent) {
 			player = new YouTubePlayer(ytComponent);
 		}
-
 		isVideoChanging.set(false);
 		duration = e.detail.duration;
+
+		// Setup initial state
 		localIsBuffering = false;
 		emitAction("buffering_end", $currentRoomId);
-		setSyncState(true, 2000);
 	}
 
 	function onYoutubeTimeUpdate(e: CustomEvent) {
@@ -322,94 +286,87 @@
 	}
 
 	function onPlay() {
-		// 1. Critical: Check Lock FIRST. If locked, we ignore everything.
-		// This prevents the "Event Flood" where onPlay fires repeatedly during sync.
-		if (isSyncLocked()) {
-			console.log("[Player] Blocked onPlay due to Sync Lock");
-			if (!isPlaying) isPlaying = true;
-			return;
-		}
+		console.log("[Player] onPlay triggered");
 
-		if (isYoutube) {
-			console.log("[Youtube] Playing -> Clearing Buffering");
-			isVideoChanging.set(false);
+		if (isYoutube && localIsBuffering) {
+			console.log("[Youtube] Recovered from Buffering -> Playing");
+
 			localIsBuffering = false;
-			emitAction("buffering_end", $currentRoomId);
+			// emitAction("buffering_end", $currentRoomId);
+
+			if ($roomState.isPlaying) {
+				console.log("[Youtube] Auto-resume detected. Suppressing 'play' emit.");
+				if (!isPlaying) isPlaying = true;
+				return;
+			}
 		}
 
 		if (isPlaying) return;
 		isPlaying = true;
 
-		// Use isSyncing check only for Youtube
-		const blockSync = isYoutube ? isSyncing : false;
-
-		if (!isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
+		// 3. Emit Play Action
+		// Only if not waiting for others, not currently waiting for buffer, etc.
+		if (!isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
 			const t = player ? player.getCurrentTime() : 0;
 			emitAction("play", { roomId: $currentRoomId, time: t });
 		}
 	}
 
 	function onPause() {
-		// 1. Critical: Check Lock FIRST.
-		if (isSyncLocked()) {
-			console.log("[Player] Blocked onPause due to Sync Lock");
-			if (isPlaying) isPlaying = false;
-			return;
-		}
+		console.log("[Player] onPause triggered");
 
 		if (!isPlaying) return;
 		isPlaying = false;
 
-		const blockSync = isYoutube ? isSyncing : false;
-
-		if (!isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
+		if (!isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
 			const t = player ? player.getCurrentTime() : 0;
 			emitAction("pause", { roomId: $currentRoomId, time: t });
 		}
 	}
 
-	function onYoutubeError(e: CustomEvent) {
-		console.error("Youtube Error:", e.detail);
-		showError("YouTube Error Code: " + e.detail);
-	}
-
 	function onSeeked() {
-		if (localIsBuffering) {
-			localIsBuffering = false;
-			emitAction("buffering_end", $currentRoomId);
-		}
+		// if (localIsBuffering) {
+		// 	localIsBuffering = false;
+		// 	emitAction("buffering_end", $currentRoomId);
+		// }
 		if (isRemoteSeeking) {
 			isRemoteSeeking = false;
 			return;
 		}
 
-		const blockSync = isYoutube ? isSyncing : false;
-
-		if (!isSyncLocked() && !blockSync) {
-			const t = player ? player.getCurrentTime() : 0;
-			emitAction("seek", { roomId: $currentRoomId, time: t });
-		}
+		const t = player ? player.getCurrentTime() : 0;
+		emitAction("seek", { roomId: $currentRoomId, time: t });
 	}
-	
+
 	function onWaiting() {
+		console.log("[Player] onWaiting triggered");
 		if (!localIsBuffering) {
+			console.log("[Player] Buffering started (onWaiting)...");
 			localIsBuffering = true;
 			emitAction("buffering_start", $currentRoomId);
 		}
 	}
 
 	function onPlaying() {
-		if (localIsBuffering) {
+		console.log("[Player] onPlaying triggered");
+		if (!localIsBuffering) {
+			console.log("[Player] Buffering ended (onPlaying)...");
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 		}
 	}
 
 	function onCanPlay() {
+		console.log("[Player] onCanPlay triggered");
 		if (localIsBuffering) {
 			localIsBuffering = false;
 			emitAction("buffering_end", $currentRoomId);
 		}
+	}
+
+	function onYoutubeError(e: CustomEvent) {
+		console.error("Youtube Error:", e.detail);
+		showError("YouTube Error Code: " + e.detail);
 	}
 
 	function showError(msg: string) {
@@ -430,12 +387,16 @@
 		}
 		if (retryCount < MAX_RETRIES) {
 			retryCount++;
+			console.log(`[Player] Retrying load (${retryCount}/${MAX_RETRIES})...`);
 			setTimeout(() => loadVideo(currentLoadedUrl, currentLoadedReferer), 1000);
 		} else {
 			showError("Video load failed.");
 		}
 	}
 
+	//-------------------------------------------------------
+	// UI Interactions
+	//-------------------------------------------------------
 	function togglePlay() {
 		if (player) {
 			isPlaying ? player.pause() : player.play();
@@ -446,6 +407,8 @@
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const percent = (e.clientX - rect.left) / rect.width;
 		const newTime = percent * duration;
+
+		// Optimistic update handled by onSeeked or player
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
 
@@ -457,6 +420,19 @@
 		seekHoverTime = seekHoverPercent * duration;
 		if (peekVideo && !isNaN(seekHoverTime)) {
 			if (Math.abs(peekVideo.currentTime - seekHoverTime) > 0.2) peekVideo.currentTime = seekHoverTime;
+		}
+	}
+
+	function initPeekHls() {
+		if (!currentLoadedUrl || peekHls) return;
+		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
+		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
+			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, startLevel: 0 });
+			peekHls.loadSource(videoUrl);
+			peekHls.attachMedia(peekVideo);
+		} else if (peekVideo) {
+			peekVideo.src = videoUrl;
+			peekVideo.load();
 		}
 	}
 
@@ -575,8 +551,8 @@
 				on:waiting={onWaiting}
 				on:ended={onPause}
 				on:error={onYoutubeError}
+				on:canplay={onCanPlay}
 			/>
-			<!-- Click Overlay -->
 			<!-- svelte-ignore a11y-click-events-have-key-events -->
 			<!-- svelte-ignore a11y-no-static-element-interactions -->
 			<div class="yt-click-overlay" on:click={handleVideoClick}></div>

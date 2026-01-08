@@ -8,20 +8,15 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 			const cleanUrl = url.trim();
 			console.log(`[Player] Request to set URL in room ${roomId}: ${cleanUrl}`);
 
-			// Notify everyone immediately that we are processing
 			io.to(roomId).emit("video_changing");
 
 			try {
 				let finalUrl = cleanUrl;
 				let finalReferer = referer;
 
-				// Check if it is a YouTube URL
-				// If it is, we DO NOT want to resolve it. We want the original link
-				// so the frontend can use the YouTube Embed Player.
 				const isYoutube = /^(https?\:\/\/)?((www\.)?youtube\.com|youtu\.?be)\/.+$/.test(cleanUrl);
 
 				if (!isYoutube) {
-					// Only resolve if NOT Youtube
 					const resolved = await resolveVideoUrl(cleanUrl);
 					finalUrl = resolved.url;
 					finalReferer = resolved.referer || referer;
@@ -34,7 +29,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 				rooms[roomId].referer = finalReferer && finalReferer.trim() !== "" ? finalReferer : null;
 
 				rooms[roomId].currentTime = 0;
-				rooms[roomId].isPlaying = true; // Auto-play
+				rooms[roomId].isPlaying = true;
 				rooms[roomId].lastUpdated = Date.now();
 
 				console.log(`[Player] URL set successfully for room ${roomId}`);
@@ -50,6 +45,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	});
 
 	socket.on("play", ({ roomId, time }: { roomId: string; time: number }) => {
+		console.log(`[Player] Play event in room ${roomId} at time ${time}`);
 		if (rooms[roomId]) {
 			rooms[roomId].isPlaying = true;
 			rooms[roomId].currentTime = time;
@@ -59,6 +55,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	});
 
 	socket.on("pause", ({ roomId, time }: { roomId: string; time: number }) => {
+		console.log(`[Player] Pause event in room ${roomId} at time ${time}`);
 		if (rooms[roomId]) {
 			rooms[roomId].isPlaying = false;
 			rooms[roomId].currentTime = time;
@@ -67,6 +64,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 	});
 
 	socket.on("seek", ({ roomId, time }: { roomId: string; time: number }) => {
+		console.log(`[Player] Seek event in room ${roomId} to time ${time}`);
 		if (rooms[roomId]) {
 			rooms[roomId].currentTime = time;
 			rooms[roomId].lastUpdated = Date.now();
@@ -74,7 +72,6 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 		}
 	});
 
-	// Buffering Logic Helper
 	const updateBuffering = (roomId: string, socketId: string, isBuffering: boolean) => {
 		if (!roomUsers[roomId] || !rooms[roomId]) return;
 
@@ -82,12 +79,13 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 		if (user) {
 			user.isBuffering = isBuffering;
 			io.to(roomId).emit("room_users", roomUsers[roomId]);
+			console.log(
+				`[Buffering] User ${user.nickname} (${socketId}) in room ${roomId} isBuffering: ${isBuffering}`
+			);
 		}
 
 		const anyBuffering = roomUsers[roomId].some((u) => u.isBuffering);
 
-		// If someone starts buffering and it was playing,
-		// "freeze" the time by setting lastUpdated to null
 		if (anyBuffering && rooms[roomId].isPlaying && rooms[roomId].lastUpdated) {
 			const elapsed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
 			rooms[roomId].currentTime += elapsed;

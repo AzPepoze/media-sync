@@ -19,6 +19,8 @@
 					>The video server blocks external players (CORS).<br />This extension (CORS Unblock)
 					<strong>removes that block</strong>.</span
 				>
+				<br /><br />
+				Actually, I can do that for you (It's called proxy), but it would cost on my end. So that's not an option.
 			</div>
 		</div>
 
@@ -84,6 +86,7 @@
 
 			.info-content {
 				display: flex;
+				flex-direction: column;
 				align-items: center;
 				gap: 0.8rem;
 				justify-content: center;
