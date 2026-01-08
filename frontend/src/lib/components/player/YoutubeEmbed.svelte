@@ -29,18 +29,24 @@
 
 	export async function seekTo(seconds: number) {
 		isEnded = false;
-		if (player && isReady) player.seekTo(seconds, true);
-		if (!shouldPlay) {
-			dispatch("canplay");
-			return;
+		seeking = true;
+		if (player && isReady) {
+			player.seekTo(seconds, true);
 		}
-		while (currentState != 3) {
+
+		// Wait a bit for YouTube to process the seek
+		await sleep(100);
+
+		// Wait for buffering to complete if it started
+		let timeout = 0;
+		while (currentState === 3 && timeout < 50) {
+			// Max 5 seconds
 			await sleep(100);
+			timeout++;
 		}
-		//@ts-ignore
-		while (currentState != 2) {
-			await sleep(100);
-		}
+
+		seeking = false;
+		dispatch("seeked");
 		dispatch("canplay");
 	}
 

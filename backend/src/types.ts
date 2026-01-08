@@ -4,6 +4,7 @@ export interface Room {
 	isPlaying: boolean;
 	currentTime: number;
 	lastUpdated: number;
+	wasPlayingBeforeSeek: boolean;
 }
 
 export interface User {

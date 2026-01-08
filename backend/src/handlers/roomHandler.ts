@@ -2,88 +2,93 @@ import { Server, Socket } from "socket.io";
 import { rooms, roomUsers, roomTimeouts } from "../store";
 import { User } from "../types";
 
+const ROOM_CLEANUP_DELAY = 60000; // 1 minute
+
 export const registerRoomHandlers = (io: Server, socket: Socket) => {
+	// Join room
 	socket.on("join_room", ({ roomId, nickname }: { roomId: string; nickname: string }) => {
 		socket.join(roomId);
-		console.log(`User ${nickname} (${socket.id}) joined room ${roomId}`);
+		console.log(`[Room] ${nickname} joined ${roomId}`);
 
-		// Clear deletion timeout if someone joins
+		// Cancel scheduled deletion
 		if (roomTimeouts[roomId]) {
 			clearTimeout(roomTimeouts[roomId]);
 			delete roomTimeouts[roomId];
-			console.log(`Deletion cancelled for room ${roomId}`);
 		}
 
-		// Init Room
+		// Initialize room if needed
 		if (!rooms[roomId]) {
 			rooms[roomId] = {
 				videoUrl: null,
 				referer: null,
 				isPlaying: false,
 				currentTime: 0,
-				lastUpdated: Date.now(),
+				lastUpdated: 0,
+				wasPlayingBeforeSeek: false,
 			};
 			roomUsers[roomId] = [];
 		}
 
-		// Add User to List (Remove duplicate nicknames first)
-		if (roomUsers[roomId]) {
-			roomUsers[roomId] = roomUsers[roomId].filter((u) => u.nickname !== nickname);
+		// Update room time before new user joins
+		const room = rooms[roomId];
+		if (room.isPlaying && room.lastUpdated) {
+			const elapsed = (Date.now() - room.lastUpdated) / 1000;
+			room.currentTime += elapsed;
+			room.lastUpdated = 0;
 		}
 
+		// Remove duplicate nicknames
+		roomUsers[roomId] = roomUsers[roomId].filter((u) => u.nickname !== nickname);
+
+		// Add new user
 		const newUser: User = {
 			id: socket.id,
-			nickname: nickname || `User ${socket.id.substring(0, 4)}`,
-			isBuffering: true,
+			nickname: nickname || `User-${socket.id.slice(0, 4)}`,
+			isBuffering: true, // Start buffering until loaded
 		};
 		roomUsers[roomId].push(newUser);
 
-		if (rooms[roomId].isPlaying && rooms[roomId].lastUpdated) {
-			const timePassed = (Date.now() - rooms[roomId].lastUpdated) / 1000;
-			rooms[roomId].currentTime += timePassed;
-			rooms[roomId].lastUpdated = Date.now();
-		}
+		// Send current state to new user
+		socket.emit("sync_state", room);
 
-		// Send current room state to the new user
-		console.log(`Syncing state to ${nickname} (${socket.id}) in room ${roomId}`);
-		socket.emit("sync_state", rooms[roomId]);
-
-		// Broadcast new user list to everyone in room
-		console.log(`Updating user list in room ${roomId}`);
+		// Broadcast updated user list
 		io.to(roomId).emit("room_users", roomUsers[roomId]);
 
-		// Check buffering status
-		const isRoomBuffering = roomUsers[roomId].some((u) => u.isBuffering);
-		if (isRoomBuffering) {
-			socket.emit("room_buffering", true);
-		}
+		// Notify about buffering status
+		const isBuffering = roomUsers[roomId].some((u) => u.isBuffering);
+		io.to(roomId).emit("room_buffering", isBuffering);
 	});
 
+	// Handle disconnect
 	socket.on("disconnecting", () => {
 		for (const roomId of socket.rooms) {
-			if (roomUsers[roomId]) {
-				// Remove user
-				roomUsers[roomId] = roomUsers[roomId].filter((u) => u.id !== socket.id);
+			const users = roomUsers[roomId];
+			if (!users) continue;
 
-				// Update list to others
-				io.to(roomId).emit("room_users", roomUsers[roomId]);
+			// Remove disconnected user
+			const user = users.find((u) => u.id === socket.id);
+			roomUsers[roomId] = users.filter((u) => u.id !== socket.id);
 
-				// Check if room is now empty
-				if (roomUsers[roomId].length === 0) {
-					console.log(`Room ${roomId} is empty. Scheduling deletion in 1 minute.`);
-					roomTimeouts[roomId] = setTimeout(() => {
-						delete rooms[roomId];
-						delete roomUsers[roomId];
-						delete roomTimeouts[roomId];
-						console.log(`Room ${roomId} has been deleted due to inactivity.`);
-					}, 60000); // 1 minute
-				}
+			if (user) {
+				console.log(`[Room] ${user.nickname} left ${roomId}`);
+			}
 
-				// Check buffering again (in case the disconnected user was holding the lock)
-				const anyBuffering = roomUsers[roomId].some((u) => u.isBuffering);
-				if (!anyBuffering && rooms[roomId]) {
-					io.to(roomId).emit("room_buffering", false);
-				}
+			// Broadcast updated list
+			io.to(roomId).emit("room_users", roomUsers[roomId]);
+
+			// Check if room is empty
+			if (roomUsers[roomId].length === 0) {
+				console.log(`[Room] ${roomId} empty, scheduling cleanup`);
+				roomTimeouts[roomId] = setTimeout(() => {
+					delete rooms[roomId];
+					delete roomUsers[roomId];
+					delete roomTimeouts[roomId];
+					console.log(`[Room] ${roomId} deleted`);
+				}, ROOM_CLEANUP_DELAY);
+			} else {
+				// Update buffering status
+				const isBuffering = roomUsers[roomId].some((u) => u.isBuffering);
+				io.to(roomId).emit("room_buffering", isBuffering);
 			}
 		}
 	});

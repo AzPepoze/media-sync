@@ -6,8 +6,11 @@
 		isWaitingForOthers,
 		isVideoChanging,
 		roomError,
-		emitAction,
 		currentRoomId,
+		emitPlay,
+		emitPause,
+		emitBufferingStart,
+		emitBufferingEnd,
 	} from "../stores/socket";
 	// Utilities
 	import { getYoutubeId, getProxyUrl, isHlsSource } from "../utils/media";
@@ -37,10 +40,12 @@
 	let currentLoadedReferer = "";
 
 	// Sync State
-	let syncLockUntil = 0;
 	let isRemoteSeeking = false;
+	let isSeeking = false;
 	let isSyncing = false;
 	let localIsBuffering = false;
+	let lastBufferingEnd = 0; // Timestamp of last buffering end to prevent rapid cycles
+	let lastServerAction = 0; // Timestamp of last server action to skip drift checks
 
 	// Error State
 	let hasError = false;
@@ -68,11 +73,30 @@
 
 	async function loadCurrentVideo() {
 		if (!$roomState?.videoUrl) {
-			emitAction("buffering_end", $currentRoomId);
+			console.log("[Sync] No video URL, ending buffering");
+			emitBufferingEnd();
 			return;
 		}
 
-		localIsBuffering = true;
+		// Don't run sync logic if we're in the middle of seeking
+		if (isSeeking || isRemoteSeeking) {
+			console.log(
+				"[Sync] Skipping sync during seek (isSeeking:",
+				isSeeking,
+				"isRemoteSeeking:",
+				isRemoteSeeking,
+				")"
+			);
+			return;
+		}
+
+		console.log(
+			"[Sync] loadCurrentVideo - localIsBuffering:",
+			localIsBuffering,
+			"isWaitingForOthers:",
+			$isWaitingForOthers
+		);
+
 		const ytId = getYoutubeId($roomState.videoUrl);
 		const isDirectLink =
 			ytId ||
@@ -95,12 +119,49 @@
 		}
 
 		if ($roomState.videoUrl !== currentLoadedUrl || stateReferer !== currentLoadedReferer) {
+			// New video - need to buffer
+			localIsBuffering = true;
 			await loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
 		} else {
-			if (!player || !player.isReady) return;
+			if (!player || !player.isReady) {
+				console.log("[Sync] Player not ready, skipping");
+				return;
+			}
+
+			// Don't sync if we're seeking - wait for seek to complete
+			if (isSeeking) {
+				console.log("[Sync] Still seeking, skipping drift check");
+				return;
+			}
+
+			// Don't drift check when waiting for others - room time is frozen and will be wrong
+			if ($isWaitingForOthers) {
+				console.log("[Sync] Waiting for others, skipping drift check - just handle play/pause state");
+				// Only handle play/pause state sync
+				const shouldBePlaying = $roomState.isPlaying && !$isWaitingForOthers;
+				if (!shouldBePlaying && player.isPlaying) {
+					console.log("[Sync] Pausing playback (waiting for others)");
+					player.pause(true); // silent=true, don't emit
+				}
+				return;
+			}
+
+			// Skip drift check if we just received a server action (within 1 second)
+			if (Date.now() - lastServerAction < 1000) {
+				console.log("[Sync] Skipping drift check - recent server action");
+				return;
+			}
 
 			const currentPlayerTime = player.getCurrentTime();
 			const diff = Math.abs(currentPlayerTime - targetTime);
+			console.log(
+				"[Sync] Drift check - currentTime:",
+				currentPlayerTime.toFixed(2),
+				"targetTime:",
+				targetTime.toFixed(2),
+				"diff:",
+				diff.toFixed(2)
+			);
 
 			if (diff > 2) {
 				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
@@ -110,21 +171,31 @@
 			// Play/Pause State Sync
 			const shouldBePlaying = $roomState.isPlaying && !$isWaitingForOthers;
 			const isActuallyPlaying = player.isPlaying;
+			console.log(
+				"[Sync] State check - shouldBePlaying:",
+				shouldBePlaying,
+				"isActuallyPlaying:",
+				isActuallyPlaying,
+				"roomState.isPlaying:",
+				$roomState.isPlaying,
+				"isWaitingForOthers:",
+				$isWaitingForOthers
+			);
 
 			// Only intervene if there is a mismatch AND we are not buffering locally
 			if (shouldBePlaying && !isActuallyPlaying && !localIsBuffering) {
 				console.log("[Sync] Resuming playback");
-				player.play();
+				player.play(true); // silent=true, don't emit
 			} else if (!shouldBePlaying && isActuallyPlaying) {
 				console.log("[Sync] Pausing playback (waiting or paused)");
-				player.pause();
+				player.pause(true); // silent=true, don't emit
 			}
 		}
 	}
 
 	async function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
 		localIsBuffering = true;
-		emitAction("buffering_start", $currentRoomId);
+		emitBufferingStart();
 
 		// Reset States
 		hasError = false;
@@ -171,7 +242,7 @@
 						if (details === "manifestLoadError" || details === "fragLoadError") {
 							showCorsHelp = true;
 							localIsBuffering = false;
-							emitAction("buffering_end", $currentRoomId);
+							emitBufferingEnd();
 						} else if (fatal) {
 							showError(`Video Error: ${details}`);
 						}
@@ -196,46 +267,77 @@
 	$: if ($roomState) loadCurrentVideo();
 	$: if ($isWaitingForOthers !== undefined) loadCurrentVideo();
 
-	$: if ($socket) {
-		$socket.off("connect");
-		$socket.off("player_action");
+	// Track our handlers so we can remove only our own, not the socket store's
+	let playerActionHandler: ((data: { action: string; time: number }) => void) | null = null;
+	let connectHandler: (() => void) | null = null;
 
-		$socket.on("connect", () => {
+	$: if ($socket) {
+		// Remove only our previous handlers (not all handlers)
+		if (connectHandler) $socket.off("connect", connectHandler);
+		if (playerActionHandler) $socket.off("player_action", playerActionHandler);
+
+		connectHandler = () => {
 			console.log("[Player] Socket connected, re-syncing...");
 			currentLoadedUrl = "";
 			loadCurrentVideo();
-		});
+		};
 
-		$socket.on("player_action", (data: { action: string; time: number }) => {
+		playerActionHandler = (data: { action: string; time: number }) => {
 			if (!player) return;
 			const playerTime = player.getCurrentTime();
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
+			// For seek action - always process it
 			if (data.action === "seek") {
+				console.log(
+					"[Player] Remote seek received - current:",
+					playerTime.toFixed(2),
+					"target:",
+					data.time.toFixed(2)
+				);
 				if (Math.abs(playerTime - data.time) < 0.5) {
+					console.log("[Player] Seek difference < 0.5s, ignoring");
 					return;
 				}
-				emitAction("buffering_start", $currentRoomId);
+				// Set seeking flags
+				console.log("[Player] Remote seek - setting flags");
 				isRemoteSeeking = true;
+				isSeeking = true;
 				localIsBuffering = true;
+				emitBufferingStart();
 
+				console.log("[Player] Executing remote seek to", data.time.toFixed(2));
 				player.seek(data.time);
-				onSeeked();
 				return;
 			}
 
-			// Sync time if drift is significant
-			const diff = Math.abs(playerTime - data.time);
-			if (diff > 0.5) {
-				player.seek(data.time);
+			// For pause during seek - just pause locally, don't emit anything
+			if (data.action === "pause") {
+				console.log("[Player] Pause action received, pausing player");
+				player.pause(true); // silent=true, don't emit
+				return;
 			}
 
+			// For play action - sync time and play
 			if (data.action === "play") {
-				player.play();
-			} else if (data.action === "pause") {
-				player.pause();
+				console.log("[Player] Play action received");
+				lastServerAction = Date.now();
+				// Clear seeking flags when play is received
+				isSeeking = false;
+				isRemoteSeeking = false;
+				// Sync time if drift is significant
+				const diff = Math.abs(playerTime - data.time);
+				if (diff > 0.5) {
+					console.log("[Player] Syncing time before play, diff:", diff.toFixed(2));
+					player.seek(data.time);
+				}
+				player.play(true); // silent=true, don't emit
+				return;
 			}
-		});
+		};
+
+		$socket.on("connect", connectHandler);
+		$socket.on("player_action", playerActionHandler);
 	}
 
 	//-------------------------------------------------------
@@ -256,7 +358,7 @@
 
 		// Setup initial state
 		localIsBuffering = false;
-		emitAction("buffering_end", $currentRoomId);
+		emitBufferingEnd();
 	}
 
 	function onYoutubeTimeUpdate(e: CustomEvent) {
@@ -274,65 +376,129 @@
 	}
 
 	function onPlay() {
-		console.log("[Player] onPlay triggered");
+		console.log(
+			"[Player] onPlay triggered - isSeeking:",
+			isSeeking,
+			"isRemoteSeeking:",
+			isRemoteSeeking,
+			"isSilentAction:",
+			player?.isSilentAction,
+			"roomState.isPlaying:",
+			$roomState.isPlaying
+		);
 
+		// Check if this was a silent action (sync/server-initiated)
+		const wasSilent = player?.isSilentAction ?? false;
+		if (player) {
+			player.isSilentAction = false; // Reset flag
+			player.updatePlayingState(true);
+		}
+
+		// Handle YouTube buffering recovery
 		if (isYoutube && localIsBuffering) {
 			console.log("[Youtube] Recovered from Buffering -> Playing");
-
 			localIsBuffering = false;
-
-			if ($roomState.isPlaying) {
-				console.log("[Youtube] Auto-resume detected. Suppressing 'play' emit.");
-				if (player) player.updatePlayingState(true);
-				return;
-			}
-		}
-
-		if (player) player.updatePlayingState(true);
-
-		if (player && player.isPlaying) return;
-
-		// Emit Play Action
-		// Only if not waiting for others, not currently waiting for buffer, etc.
-		if (!isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
-			const t = player ? player.getCurrentTime() : 0;
-			emitAction("play", { roomId: $currentRoomId, time: t });
-		}
-	}
-
-	function onPause() {
-		console.log("[Player] onPause triggered");
-
-		if (player) player.updatePlayingState(false);
-
-		if (player && !player.isPlaying) return;
-
-		if (!isRemoteSeeking && !$isWaitingForOthers && !localIsBuffering) {
-			const t = player ? player.getCurrentTime() : 0;
-			emitAction("pause", { roomId: $currentRoomId, time: t });
-		}
-	}
-
-	function onSeeked() {
-		// if (localIsBuffering) {
-		// 	localIsBuffering = false;
-		// 	emitAction("buffering_end", $currentRoomId);
-		// }
-		if (isRemoteSeeking) {
-			isRemoteSeeking = false;
 			return;
 		}
 
+		// Don't emit if this was a silent action (sync/server-initiated)
+		if (wasSilent) {
+			console.log("[Player] Silent play action, not emitting");
+			return;
+		}
+
+		// Don't emit during seek flow
+		if (isSeeking || isRemoteSeeking) {
+			console.log("[Player] Seeking, not emitting play");
+			return;
+		}
+
+		// User clicked play - emit to server
 		const t = player ? player.getCurrentTime() : 0;
-		emitAction("seek", { roomId: $currentRoomId, time: t });
+		console.log("[Player] User play action, emitting at time:", t.toFixed(2));
+		emitPlay(t);
 	}
 
+	function onPause() {
+		console.log(
+			"[Player] onPause triggered - isSeeking:",
+			isSeeking,
+			"isRemoteSeeking:",
+			isRemoteSeeking,
+			"isSilentAction:",
+			player?.isSilentAction,
+			"roomState.isPlaying:",
+			$roomState.isPlaying
+		);
+
+		// Check if this was a silent action (sync/server-initiated)
+		const wasSilent = player?.isSilentAction ?? false;
+		if (player) {
+			player.isSilentAction = false; // Reset flag
+			player.updatePlayingState(false);
+		}
+
+		// Don't emit if this was a silent action (sync/server-initiated)
+		if (wasSilent) {
+			console.log("[Player] Silent pause action, not emitting");
+			return;
+		}
+
+		// Don't emit during seek flow
+		if (isSeeking || isRemoteSeeking) {
+			console.log("[Player] Seeking, not emitting pause");
+			return;
+		}
+
+		// User clicked pause - emit to server
+		const t = player ? player.getCurrentTime() : 0;
+		console.log("[Player] User pause action, emitting at time:", t.toFixed(2));
+		emitPause(t);
+	}
+
+	function onSeeked() {
+		const currentTime = player ? player.getCurrentTime() : 0;
+		console.log("[Player] onSeeked triggered at time:", currentTime.toFixed(2));
+
+		// Clear seeking flags
+		const wasRemoteSeeking = isRemoteSeeking;
+		console.log("[Player] Seek complete - wasRemoteSeeking:", wasRemoteSeeking);
+
+		// Only clear remote seeking flag
+		isRemoteSeeking = false;
+
+		// End buffering state - server will send play if needed
+		if (localIsBuffering) {
+			console.log("[Player] Ending buffering state after seek");
+			localIsBuffering = false;
+			lastBufferingEnd = Date.now();
+			emitBufferingEnd();
+		}
+
+		// Clear isSeeking after a delay to let room state update
+		setTimeout(() => {
+			console.log("[Player] Clearing isSeeking flag");
+			isSeeking = false;
+		}, 200);
+
+		console.log("[Player] onSeeked complete - waiting for server action");
+	}
 	function onWaiting() {
 		console.log("[Player] onWaiting triggered");
+		// Don't trigger buffering if we're just seeking
+		if (isSeeking || isRemoteSeeking) {
+			console.log("[Player] Waiting during seek, not triggering buffering");
+			return;
+		}
+		// Don't trigger buffering if we just finished buffering (debounce)
+		if (Date.now() - lastBufferingEnd < 500) {
+			console.log("[Player] Waiting too soon after buffering end, ignoring");
+			return;
+		}
 		if (!localIsBuffering) {
 			console.log("[Player] Buffering started (onWaiting)...");
 			localIsBuffering = true;
-			emitAction("buffering_start", $currentRoomId);
+			emitBufferingStart();
 		}
 	}
 
@@ -341,7 +507,8 @@
 		if (localIsBuffering) {
 			console.log("[Player] Buffering ended (onPlaying)...");
 			localIsBuffering = false;
-			emitAction("buffering_end", $currentRoomId);
+			lastBufferingEnd = Date.now();
+			emitBufferingEnd();
 		}
 	}
 
@@ -349,7 +516,8 @@
 		console.log("[Player] onCanPlay triggered");
 		if (localIsBuffering) {
 			localIsBuffering = false;
-			emitAction("buffering_end", $currentRoomId);
+			lastBufferingEnd = Date.now();
+			emitBufferingEnd();
 		}
 	}
 
@@ -362,7 +530,7 @@
 		localIsBuffering = false;
 		hasError = true;
 		errorMessage = msg;
-		emitAction("buffering_end", $currentRoomId);
+		emitBufferingEnd();
 	}
 
 	function handleVideoError() {
@@ -371,7 +539,7 @@
 		if (err && (err.code === 2 || err.code === 4)) {
 			showCorsHelp = true;
 			localIsBuffering = false;
-			emitAction("buffering_end", $currentRoomId);
+			emitBufferingEnd();
 			return;
 		}
 		if (retryCount < MAX_RETRIES) {
@@ -392,13 +560,42 @@
 		}
 	}
 
+	function seekTo(time: number) {
+		console.log("[Seek] Starting seek to", time.toFixed(2), "- wasPlaying:", player?.isPlaying);
+		// Remember if we were playing before seek
+		const wasPlaying = player?.isPlaying ?? false;
+
+		// Set seeking flag and start buffering
+		isSeeking = true;
+		localIsBuffering = true;
+		console.log("[Seek] Setting isSeeking=true, localIsBuffering=true, emitting buffering_start");
+		emitBufferingStart();
+
+		// Pause locally first
+		if (player && player.isPlaying) {
+			console.log("[Seek] Pausing player before seek");
+			player.pause(true); // silent=true, don't emit
+		}
+
+		// Seek locally
+		if (player) {
+			console.log("[Seek] Executing local player.seek(", time.toFixed(2), ")");
+			player.seek(time);
+		}
+
+		// Emit seek with wasPlaying flag - server will:
+		// 1. Pause all clients
+		// 2. Seek all clients
+		// 3. Resume when everyone is ready (if wasPlaying was true)
+		console.log("[Seek] Emitting seek action with wasPlaying:", wasPlaying);
+		$socket?.emit("seek", { roomId: $currentRoomId, time, wasPlaying });
+	}
+
 	function handleSeek(e: MouseEvent) {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const percent = (e.clientX - rect.left) / rect.width;
 		const newTime = percent * duration;
-
-		// Optimistic update handled by onSeeked or player
-		emitAction("seek", { roomId: $currentRoomId, time: newTime });
+		seekTo(newTime);
 	}
 
 	function handleSeekHover(e: MouseEvent) {
@@ -464,7 +661,7 @@
 	function skipTime(seconds: number) {
 		const curr = player ? player.getCurrentTime() : 0;
 		const newTime = Math.max(0, Math.min(duration, curr + seconds));
-		emitAction("seek", { roomId: $currentRoomId, time: newTime });
+		seekTo(newTime);
 	}
 
 	function showControlsTemp() {
@@ -537,6 +734,7 @@
 				on:timeupdate={onYoutubeTimeUpdate}
 				on:play={onPlay}
 				on:pause={onPause}
+				on:seeked={onSeeked}
 				on:waiting={onWaiting}
 				on:ended={onPause}
 				on:error={onYoutubeError}
@@ -568,10 +766,7 @@
 	></video>
 
 	{#if $isVideoChanging || ($roomState?.videoUrl && (localIsBuffering || $isWaitingForOthers))}
-		<LoadingOverlay
-			isVideoChanging={$isVideoChanging}
-			localIsBuffering={localIsBuffering && !$isWaitingForOthers}
-		/>
+		<LoadingOverlay isVideoChanging={$isVideoChanging} {localIsBuffering} />
 	{:else if !$roomState?.videoUrl}
 		<NoVideoOverlay />
 	{/if}
