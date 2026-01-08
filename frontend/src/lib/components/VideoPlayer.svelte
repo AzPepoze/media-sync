@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Hls from "hls.js";
+	import { tick } from "svelte";
 	import {
 		socket,
 		roomState,
@@ -11,6 +11,9 @@
 	} from "../stores/socket";
 	// Utilities
 	import { getYoutubeId, getProxyUrl, isHlsSource } from "../utils/media";
+	import { HTML5Player, YouTubePlayer, type BasePlayer } from "../utils/players";
+	import Hls from "hls.js";
+	// Needed for Peek only now
 
 	// Sub-components
 	import SeekTooltip from "./player/SeekTooltip.svelte";
@@ -26,7 +29,9 @@
 	let peekVideo: HTMLVideoElement;
 	let ytComponent: YoutubeEmbed;
 
-	let hls: Hls | null = null;
+	// Player Strategy Instance
+	let player: BasePlayer | null = null;
+
 	let peekHls: Hls | null = null;
 
 	// State Tracking
@@ -35,10 +40,26 @@
 	let currentLoadedReferer = "";
 
 	// Sync State
-	let isRemoteActionActive = false;
+	let syncLockUntil = 0;
 	let isRemoteSeeking = false;
 	let isSyncing = false; // Flag to prevent loopback echoes
 	let localIsBuffering = false;
+
+	function setSyncState(isActive: boolean, duration = 1500) {
+		if (isActive) {
+			syncLockUntil = Date.now() + duration;
+			isSyncing = true; // Still keep for UI or other checks if needed
+		} else {
+			syncLockUntil = 0;
+			isSyncing = false;
+		}
+	}
+
+	function isSyncLocked() {
+		const locked = Date.now() < syncLockUntil;
+		if (!locked && isSyncing) isSyncing = false; // Auto-clear flag
+		return locked;
+	}
 
 	// Error State
 	let hasError = false;
@@ -60,22 +81,6 @@
 	let seekHoverPercent = 0;
 	let isHoveringSeek = false;
 	let controlsTimeout: ReturnType<typeof setTimeout>;
-	let remoteActionTimeout: ReturnType<typeof setTimeout>;
-
-	function setSyncState(isActive: boolean, duration = 1500) {
-		clearTimeout(remoteActionTimeout);
-		if (isActive) {
-			isRemoteActionActive = true;
-			isSyncing = true;
-			remoteActionTimeout = setTimeout(() => {
-				isRemoteActionActive = false;
-				isSyncing = false;
-			}, duration);
-		} else {
-			isRemoteActionActive = false;
-			isSyncing = false;
-		}
-	}
 
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
@@ -90,7 +95,7 @@
 		}
 	}
 
-	function loadCurrentVideo() {
+	async function loadCurrentVideo() {
 		if (!$roomState?.videoUrl) return;
 
 		const ytId = getYoutubeId($roomState.videoUrl);
@@ -118,40 +123,25 @@
 			loadVideo($roomState.videoUrl, stateReferer, targetTime, $roomState.isPlaying);
 		} else {
 			// --- Sync Check ---
-			// If we are currently processing a remote action (socket event), 
-			// do not interfere with local state corrections to avoid fighting/loops.
-			if (isRemoteActionActive) return;
+			if (isSyncLocked()) return;
 
-			let currentPlayerTime = 0;
-			if (isYoutube && ytComponent) currentPlayerTime = ytComponent.getCurrentTime();
-			else if (!isYoutube && videoElement) currentPlayerTime = videoElement.currentTime;
+			let currentPlayerTime = player ? player.getCurrentTime() : 0;
 
 			const diff = Math.abs(currentPlayerTime - targetTime);
 			if (diff > 2) {
 				console.log(`[Sync] Drift detected (${diff.toFixed(2)}s). Resyncing...`);
 				setSyncState(true, 2000);
-				if (isYoutube && ytComponent) ytComponent.seekTo(targetTime);
-				else if (videoElement) videoElement.currentTime = targetTime;
+				player?.seek(targetTime);
 			}
 
 			const shouldBePlaying = $roomState.isPlaying;
-			let amIPlaying = false;
-
-			if (isYoutube && ytComponent) {
-				const state = ytComponent.getPlayerState();
-				amIPlaying = state === 1;
-			} else if (videoElement) {
-				amIPlaying = !videoElement.paused;
-			}
-
-			if (shouldBePlaying && !amIPlaying && !$isWaitingForOthers && !localIsBuffering) {
+			// Check internal state match
+			if (shouldBePlaying && !isPlaying && !$isWaitingForOthers && !localIsBuffering) {
 				setSyncState(true, 1500);
-				if (isYoutube && ytComponent) ytComponent.play();
-				else if (videoElement) videoElement.play().catch(() => {});
-			} else if (!shouldBePlaying && amIPlaying) {
+				player?.play();
+			} else if (!shouldBePlaying && isPlaying) {
 				setSyncState(true, 1500);
-				if (isYoutube && ytComponent) ytComponent.pause();
-				else if (videoElement) videoElement.pause();
+				player?.pause();
 			}
 		}
 	}
@@ -170,11 +160,9 @@
 		});
 
 		$socket.on("player_action", (data: { action: string; time: number }) => {
-			if (!videoElement && !ytComponent) return;
+			if (!player) return;
 
-			let playerTime = 0;
-			if (isYoutube && ytComponent) playerTime = ytComponent.getCurrentTime();
-			else if (videoElement) playerTime = videoElement.currentTime;
+			let playerTime = player.getCurrentTime();
 
 			console.log("[Player] Action received:", data.action, "at", data.time);
 
@@ -188,15 +176,13 @@
 				}
 
 				isRemoteSeeking = true;
-				if (isYoutube && ytComponent) ytComponent.seekTo(data.time);
-				else if (videoElement) videoElement.currentTime = data.time;
+				player.seek(data.time);
 
 				localIsBuffering = true;
 				emitAction("buffering_start", $currentRoomId);
 
 				setTimeout(() => {
-					if (isYoutube) onSeeked();
-					else if (Math.abs(videoElement.currentTime - data.time) < 0.2) onSeeked();
+					onSeeked();
 				}, 1000);
 				// Keep Sync active a bit longer for seek
 				setSyncState(true, 2000);
@@ -205,49 +191,33 @@
 
 			const diff = Math.abs(playerTime - data.time);
 			if (diff > 0.5) {
-				if (isYoutube && ytComponent) ytComponent.seekTo(data.time);
-				else if (videoElement) videoElement.currentTime = data.time;
+				player.seek(data.time);
 			}
 
 			if (data.action === "play") {
-				isPlaying = true;
-				if (isYoutube && ytComponent) ytComponent.play();
-				else if (videoElement)
-					videoElement.play().catch(() => {
-						isPlaying = false;
-					});
+				isPlaying = true; // Optimistic update
+				player.play();
 			} else if (data.action === "pause") {
-				isPlaying = false;
-				if (isYoutube && ytComponent) ytComponent.pause();
-				else if (videoElement) videoElement.pause();
+				isPlaying = false; // Optimistic update
+				player.pause();
 			}
 
 			setSyncState(true, 1500);
 		});
 
 		$socket.on("room_buffering", (isBuffering: boolean) => {
-			if (!videoElement && !ytComponent) return;
+			if (!player) return;
 			setSyncState(true, 1000);
 
-			let playerPaused = true;
-			if (isYoutube && ytComponent) playerPaused = ytComponent.getPlayerState() !== 1;
-			else if (videoElement) playerPaused = videoElement.paused;
-
 			if (isBuffering) {
-				if (!playerPaused) {
-					if (isYoutube && ytComponent) ytComponent.pause();
-					else if (videoElement) {
-						videoElement.pause();
-						isPlaying = false;
-					}
+				if (isPlaying) {
+					player.pause();
+					isPlaying = false;
 				}
 			} else if ($roomState.isPlaying && !localIsBuffering) {
-				if (playerPaused) {
-					if (isYoutube && ytComponent) ytComponent.play();
-					else if (videoElement) {
-						videoElement.play().catch(() => {});
-						isPlaying = true;
-					}
+				if (!isPlaying) {
+					player.play();
+					isPlaying = true;
 				}
 			}
 			setSyncState(true, 1000);
@@ -264,96 +234,72 @@
 		buffered = 0;
 		isPlaying = shouldPlay;
 		retryCount = 0;
-		isRemoteActionActive = true;
 
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
 
 		const ytId = getYoutubeId(url);
 
-		if (videoElement) {
-			videoElement.pause();
-			videoElement.removeAttribute("src");
-			videoElement.load();
-		}
-		if (hls) {
-			hls.destroy();
-			hls = null;
+		// Clean up old player
+		if (player && player.type === (ytId ? "html5" : "youtube")) {
+			player.destroy();
+			player = null;
 		}
 
 		if (ytId) {
 			isYoutube = true;
+			// Wait for Svelte to mount YoutubeEmbed
+			await tick();
+			// Re-instantiate player wrapper if needed or update existing
+			if (!player || player.type !== "youtube") {
+				// We rely on YoutubeEmbed to fire 'ready' event to confirm it's usable,
+				// but we can wrap it now if component instance is bound
+				if (ytComponent) {
+					player = new YouTubePlayer(ytComponent);
+				}
+			}
+			// For YouTube, the component reactivity handles the ID change via prop `videoId`
+			// We just wait for 'ready' event
 			return;
 		} else {
 			isYoutube = false;
-		}
+			await tick();
 
-		const videoUrl = getProxyUrl(url, referer);
-
-		if (Hls.isSupported() && isHlsSource(url)) {
-			hls = new Hls({
-				capLevelToPlayerSize: true,
-				manifestLoadingMaxRetry: 2,
-				levelLoadingMaxRetry: 2,
-				fragLoadingMaxRetry: 3,
-				enableWorker: true,
-				xhrSetup: (xhr, url) => {
-					xhr.withCredentials = false;
-				},
-			});
-			hls.on(Hls.Events.MANIFEST_PARSED, () => {
-				isVideoChanging.set(false);
-				if (videoElement) {
-					videoElement.currentTime = startTime;
-					if (shouldPlay) videoElement.play().catch(() => {});
-				}
-				setSyncState(true, 2000);
-			});
-			hls.loadSource(videoUrl);
-			hls.attachMedia(videoElement);
-			hls.on(Hls.Events.ERROR, (e, data) => {
-				const status = data.response?.code;
-				const isNetworkError = data.type === Hls.ErrorTypes.NETWORK_ERROR;
-				const isCorsLike = isNetworkError && (!status || status === 0);
-
-				if (isCorsLike) {
-					if (
-						buffered === 0 ||
-						data.details === "manifestLoadError" ||
-						data.details === "fragLoadError"
-					) {
-						hls?.destroy();
-						showCorsHelp = true;
-						localIsBuffering = false;
-						emitAction("buffering_end", $currentRoomId);
-						return;
+			if (!player || player.type !== "html5") {
+				player = new HTML5Player(
+					videoElement,
+					() => {
+						// onManifestParsed / Loaded
+						isVideoChanging.set(false);
+						setSyncState(true, 2000);
+					},
+					(type, details, fatal) => {
+						// onError
+						// Reuse existing error logic logic roughly...
+						if (details === "manifestLoadError" || details === "fragLoadError") {
+							showCorsHelp = true;
+							localIsBuffering = false;
+							emitAction("buffering_end", $currentRoomId);
+						} else if (fatal) {
+							showError(`Video Error: ${details}`);
+						}
 					}
-				}
-
-				if (data.fatal) {
-					if (retryCount < MAX_RETRIES && isNetworkError) {
-						retryCount++;
-						setTimeout(() => hls?.loadSource(videoUrl), 1000);
-					} else {
-						hls?.destroy();
-						showError(status ? `Error ${status}: Failed to load stream.` : "Playback failed.");
-					}
-				}
-			});
-		} else {
-			videoElement.src = videoUrl;
-			videoElement.currentTime = startTime;
-			videoElement.oncanplay = () => {
-				isVideoChanging.set(false);
-				if (shouldPlay) videoElement.play().catch(() => {});
-				setSyncState(true, 2000);
-			};
-			videoElement.load();
+				);
+			}
+			// Cast to HTML5Player to access specific load method
+			if (player instanceof HTML5Player) {
+				player.load(url, referer, startTime, shouldPlay);
+			}
 		}
 	}
 
 	function onYoutubeReady(e: CustomEvent) {
 		console.log("[Youtube] Ready");
+		// Ensure player wrapper is set
+		if (!player && ytComponent) {
+			player = new YouTubePlayer(ytComponent);
+		}
+
 		isVideoChanging.set(false);
 		duration = e.detail.duration;
 		localIsBuffering = false;
@@ -376,6 +322,14 @@
 	}
 
 	function onPlay() {
+		// 1. Critical: Check Lock FIRST. If locked, we ignore everything.
+		// This prevents the "Event Flood" where onPlay fires repeatedly during sync.
+		if (isSyncLocked()) {
+			console.log("[Player] Blocked onPlay due to Sync Lock");
+			if (!isPlaying) isPlaying = true;
+			return;
+		}
+
 		if (isYoutube) {
 			console.log("[Youtube] Playing -> Clearing Buffering");
 			isVideoChanging.set(false);
@@ -389,20 +343,27 @@
 		// Use isSyncing check only for Youtube
 		const blockSync = isYoutube ? isSyncing : false;
 
-		if (!isRemoteActionActive && !isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
-			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+		if (!isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
+			const t = player ? player.getCurrentTime() : 0;
 			emitAction("play", { roomId: $currentRoomId, time: t });
 		}
 	}
 
 	function onPause() {
+		// 1. Critical: Check Lock FIRST.
+		if (isSyncLocked()) {
+			console.log("[Player] Blocked onPause due to Sync Lock");
+			if (isPlaying) isPlaying = false;
+			return;
+		}
+
 		if (!isPlaying) return;
 		isPlaying = false;
 
 		const blockSync = isYoutube ? isSyncing : false;
 
-		if (!isRemoteActionActive && !isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
-			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+		if (!isRemoteSeeking && !blockSync && !$isWaitingForOthers && !localIsBuffering) {
+			const t = player ? player.getCurrentTime() : 0;
 			emitAction("pause", { roomId: $currentRoomId, time: t });
 		}
 	}
@@ -424,12 +385,12 @@
 
 		const blockSync = isYoutube ? isSyncing : false;
 
-		if (!isRemoteActionActive && !blockSync) {
-			const t = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+		if (!isSyncLocked() && !blockSync) {
+			const t = player ? player.getCurrentTime() : 0;
 			emitAction("seek", { roomId: $currentRoomId, time: t });
 		}
 	}
-
+	
 	function onWaiting() {
 		if (!localIsBuffering) {
 			localIsBuffering = true;
@@ -459,7 +420,7 @@
 	}
 
 	function handleVideoError() {
-		if (hls || isYoutube) return;
+		if (isYoutube) return;
 		const err = videoElement.error;
 		if (err && (err.code === 2 || err.code === 4)) {
 			showCorsHelp = true;
@@ -476,10 +437,8 @@
 	}
 
 	function togglePlay() {
-		if (isYoutube && ytComponent) {
-			isPlaying ? ytComponent.pause() : ytComponent.play();
-		} else if (videoElement) {
-			isPlaying ? videoElement.pause() : videoElement.play();
+		if (player) {
+			isPlaying ? player.pause() : player.play();
 		}
 	}
 
@@ -503,12 +462,10 @@
 
 	function handleVolume(e: Event) {
 		volume = parseFloat((e.target as HTMLInputElement).value);
-		if (isYoutube && ytComponent) {
-			ytComponent.setVolume(volume);
-			if (volume === 0) ytComponent.mute();
-			else ytComponent.unMute();
-		} else if (videoElement) {
-			videoElement.volume = volume;
+		if (player) {
+			player.setVolume(volume);
+			if (volume === 0) player.setMute(true);
+			else player.setMute(false);
 		}
 		isMuted = volume === 0;
 	}
@@ -516,12 +473,9 @@
 	function toggleMute() {
 		isMuted = !isMuted;
 		volume = isMuted ? 0 : 1;
-		if (isYoutube && ytComponent) {
-			isMuted ? ytComponent.mute() : ytComponent.unMute();
-			ytComponent.setVolume(volume);
-		} else if (videoElement) {
-			videoElement.volume = volume;
-			videoElement.muted = isMuted;
+		if (player) {
+			player.setMute(isMuted);
+			player.setVolume(volume);
 		}
 	}
 
@@ -543,7 +497,7 @@
 	}
 
 	function skipTime(seconds: number) {
-		const curr = isYoutube && ytComponent ? ytComponent.getCurrentTime() : videoElement?.currentTime;
+		const curr = player ? player.getCurrentTime() : 0;
 		const newTime = Math.max(0, Math.min(duration, curr + seconds));
 		emitAction("seek", { roomId: $currentRoomId, time: newTime });
 	}
@@ -747,12 +701,12 @@
 			position: absolute;
 			top: 0;
 			left: 0;
+		}
 
-			&.hidden {
-				display: none;
-				visibility: hidden;
-				pointer-events: none;
-			}
+		video.hidden {
+			display: none;
+			visibility: hidden;
+			pointer-events: none;
 		}
 
 		.youtube-wrapper {
