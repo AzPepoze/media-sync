@@ -6,7 +6,6 @@
 		addToCollection,
 		removeFromCollection,
 		renameCollection,
-		renameCollectionItem,
 		updateCollectionItem,
 		exportCollectionsJson,
 		importCollectionsJson,
@@ -201,13 +200,15 @@
 									if (e.key === "Enter") saveRenameCollection(collection.id);
 									if (e.key === "Escape") cancelRenameCollection();
 								}}
-								autoFocus
 							/>
 							<div class="edit-controls">
-								<button class="sm-btn highlight" on:click={() => saveRenameCollection(collection.id)}
-									>Save</button
+								<button
+									class="sm-btn highlight"
+									on:click={() => saveRenameCollection(collection.id)}>Save</button
 								>
-								<button class="sm-btn secondary" on:click={cancelRenameCollection}>Cancel</button>
+								<button class="sm-btn secondary" on:click={cancelRenameCollection}
+									>Cancel</button
+								>
 							</div>
 						</div>
 					{:else}
@@ -272,31 +273,37 @@
 								<input type="text" bind:value={editItemUrl} placeholder="URL" />
 								<input type="text" bind:value={editItemReferer} placeholder="Referer" />
 								<div class="edit-controls">
-									<button class="sm-btn highlight" on:click={() => saveEditItem(collection.id, item.id)}
-										>Save</button
+									<button
+										class="sm-btn highlight"
+										on:click={() => saveEditItem(collection.id, item.id)}>Save</button
 									>
 									<button class="sm-btn secondary" on:click={cancelEditItem}>Cancel</button>
 								</div>
 							</div>
 						{:else}
-														<div class="media-item">
-															<button class="play-btn" on:click={() => playItem(item)} title="Play Video">
-																▶
-															</button>
-															<div class="info">
-																<span class="title">{item.title}</span>
-																<span class="url">{item.url}</span>
-															</div>
-															<div class="item-controls">
-																<button class="sm-btn" on:click={() => startEditItem(item.id, item)} title="Edit">
-																	Edit
-																</button>
-																<button
-																	class="sm-btn danger"
-																	on:click={() => removeFromCollection(collection.id, item.id)}>Delete</button
-																>
-															</div>
-														</div>
+							<div class="media-item">
+								<button class="play-btn" on:click={() => playItem(item)} title="Play Video">
+									▶
+								</button>
+								<div class="info">
+									<span class="title">{item.title}</span>
+									<span class="url">{item.url}</span>
+								</div>
+								<div class="item-controls">
+									<button
+										class="sm-btn"
+										on:click={() => startEditItem(item.id, item)}
+										title="Edit"
+									>
+										Edit
+									</button>
+									<button
+										class="sm-btn danger"
+										on:click={() => removeFromCollection(collection.id, item.id)}
+										>Delete</button
+									>
+								</div>
+							</div>
 						{/if}
 					{/each}
 					{#if collection.items.length === 0}

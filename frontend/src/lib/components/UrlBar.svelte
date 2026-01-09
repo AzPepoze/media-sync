@@ -23,9 +23,8 @@
 	function handleLoad() {
 		if ($currentRoomId && inputUrl.trim()) {
 			isLoading = true;
-			isVideoChanging.set(true); // Instant feedback locally
+			isVideoChanging.set(true);
 			setUrl($currentRoomId, inputUrl.trim(), refererUrl.trim());
-			// Security fallback: if backend fails to respond, reset loading after 15s
 			setTimeout(() => {
 				isLoading = false;
 				isVideoChanging.set(false);

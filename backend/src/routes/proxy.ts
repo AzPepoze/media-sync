@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import axios, { AxiosRequestConfig } from "axios";
 import { URL } from "url";
+import { getCachedChunk, createCachedChunk, markChunkLoaded, markChunkLoadingStart } from "../store";
 
 const router = Router();
 
@@ -9,10 +10,14 @@ const router = Router();
 const DEFAULT_USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+const FRONTEND_URL = process.env.FRONTEND_URL || "*";
+
 interface ProxyRequestQuery {
 	url?: string;
 	referer?: string;
 	proxySegments?: string;
+	roomId?: string;
+	socketId?: string;
 }
 
 // Helper Functions
@@ -27,11 +32,12 @@ const getServerBaseUrl = (req: Request): string => {
 	return `${protocol}://${req.get("host")}`;
 };
 
-const createProxiedUrl = (targetUrl: string, serverBaseUrl: string, referer?: string): string => {
+const createProxiedUrl = (targetUrl: string, serverBaseUrl: string, referer?: string, roomId?: string): string => {
 	try {
 		const encodedUrl = encodeURIComponent(targetUrl);
 		let proxyUrl = `${serverBaseUrl}/proxy?url=${encodedUrl}`;
 		if (referer) proxyUrl += `&referer=${encodeURIComponent(referer)}`;
+		if (roomId) proxyUrl += `&roomId=${encodeURIComponent(roomId)}`;
 		return proxyUrl;
 	} catch (error) {
 		return targetUrl;
@@ -51,7 +57,8 @@ const rewriteManifestContent = (
 	manifestBaseUrl: string,
 	serverBaseUrl: string,
 	referer?: string,
-	proxySegments?: boolean
+	proxySegments?: boolean,
+	roomId?: string
 ): string => {
 	const lines = manifestContent.split("\n");
 
@@ -81,7 +88,7 @@ const rewriteManifestContent = (
 
 		if (proxySegments) {
 			// For Mobile: Route everything through proxy
-			return createProxiedUrl(absoluteSegmentUrl, serverBaseUrl, referer);
+			return createProxiedUrl(absoluteSegmentUrl, serverBaseUrl, referer, roomId);
 		} else {
 			// For Desktop: Direct access (Absolute URL)
 			return absoluteSegmentUrl;
@@ -93,11 +100,44 @@ const rewriteManifestContent = (
 
 // Route Handlers
 router.get("/proxy", async (req: Request, res: Response) => {
-	const { url: targetUrl, referer, proxySegments } = req.query as unknown as ProxyRequestQuery;
+	const { url: targetUrl, referer, proxySegments, roomId, socketId } = req.query as unknown as ProxyRequestQuery;
 	const shouldProxySegments = proxySegments === "true";
 
 	if (!targetUrl || typeof targetUrl !== "string") {
 		return res.status(400).send("Missing or invalid 'url' parameter");
+	}
+
+	// Generate chunk key for caching (URL + Range header for partial requests)
+	const rangeHeader = req.headers.range || "";
+	const chunkKey = `${targetUrl}:${rangeHeader}`;
+
+	// Check if this is a segment request with room context - try cache first
+	const isSegmentRequest = roomId && socketId && !targetUrl.toLowerCase().includes(".m3u8");
+
+	if (isSegmentRequest) {
+		const cached = getCachedChunk(roomId, chunkKey);
+		if (cached) {
+			// Mark user as loading (for timeout protection)
+			markChunkLoadingStart(roomId, chunkKey, socketId);
+
+			// Serve from cache
+			res.setHeader("Access-Control-Allow-Origin", FRONTEND_URL);
+			res.setHeader("Access-Control-Allow-Headers", "Range");
+			res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range");
+			res.setHeader("Content-Type", cached.contentType);
+			res.setHeader("X-Cache", "HIT");
+
+			// Forward cached headers
+			for (const [key, value] of Object.entries(cached.headers)) {
+				res.setHeader(key, value);
+			}
+
+			res.send(cached.data);
+
+			// Mark this user as having loaded the chunk (may delete it)
+			markChunkLoaded(roomId, chunkKey, socketId);
+			return;
+		}
 	}
 
 	try {
@@ -148,7 +188,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
 			contentType.includes("apple.mpegurl");
 
 		// Set basic CORS headers
-		res.setHeader("Access-Control-Allow-Origin", "*");
+		res.setHeader("Access-Control-Allow-Origin", FRONTEND_URL);
 		res.setHeader("Access-Control-Allow-Headers", "Range");
 		res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range");
 
@@ -171,7 +211,8 @@ router.get("/proxy", async (req: Request, res: Response) => {
 						finalResourceUrl,
 						serverBaseUrl,
 						referer,
-						shouldProxySegments
+						shouldProxySegments,
+						roomId
 					);
 					res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
 					res.send(rewrittenManifest);
@@ -186,7 +227,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
 				if (!res.headersSent) res.status(500).send("Error reading manifest stream");
 			});
 		} else {
-			// --- MP4/BINARY LOGIC (Pipe Stream Directly) ---
+			// --- SEGMENT/BINARY LOGIC ---
 
 			// Forward critical headers for streaming
 			if (contentType) res.setHeader("Content-Type", contentType);
@@ -201,20 +242,54 @@ router.get("/proxy", async (req: Request, res: Response) => {
 			// Forward the status code (200 OK or 206 Partial Content)
 			res.status(response.status);
 
-			// Pipe data directly to client (efficient for large files)
-			response.data.pipe(res);
+			// If this is a segment request with room context, buffer and cache for other users
+			if (isSegmentRequest && roomId && socketId) {
+				const chunks: Buffer[] = [];
 
-			// Cleanup
-			response.data.on("error", (err: any) => {
-				// console.error("Stream error", err);
-				if (!res.headersSent) res.end();
-			});
+				response.data.on("data", (chunk: Buffer) => {
+					chunks.push(chunk);
+				});
 
-			req.on("close", () => {
-				if (response.data && typeof response.data.destroy === "function") {
-					response.data.destroy();
-				}
-			});
+				response.data.on("end", () => {
+					const buffer = Buffer.concat(chunks);
+
+					// Cache for other users in the room
+					const headersToCache: Record<string, string> = {};
+					if (response.headers["accept-ranges"])
+						headersToCache["Accept-Ranges"] = response.headers["accept-ranges"];
+					if (response.headers["content-range"])
+						headersToCache["Content-Range"] = response.headers["content-range"];
+
+					createCachedChunk(roomId, chunkKey, buffer, contentType, headersToCache, socketId);
+
+					res.setHeader("X-Cache", "MISS");
+					res.send(buffer);
+				});
+
+				response.data.on("error", (err: any) => {
+					if (!res.headersSent) res.status(500).send("Error reading stream");
+				});
+
+				req.on("close", () => {
+					if (response.data && typeof response.data.destroy === "function") {
+						response.data.destroy();
+					}
+				});
+			} else {
+				// No room context - pipe directly (efficient for large files)
+				response.data.pipe(res);
+
+				// Cleanup
+				response.data.on("error", (err: any) => {
+					if (!res.headersSent) res.end();
+				});
+
+				req.on("close", () => {
+					if (response.data && typeof response.data.destroy === "function") {
+						response.data.destroy();
+					}
+				});
+			}
 		}
 	} catch (error: any) {
 		if (!res.headersSent) {

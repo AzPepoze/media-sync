@@ -12,6 +12,7 @@
 	let player: any = null;
 	let timeInterval: ReturnType<typeof setInterval>;
 	let currentState: number = -1;
+	let previousState: number = -1;
 	let isReady = false;
 	let isEnded = false;
 	let isBuffering = true;
@@ -23,8 +24,12 @@
 		if (player && isReady) player.playVideo();
 	}
 
-	export function pause() {
+	export async function pause() {
 		if (player && isReady) player.pauseVideo();
+
+		while (currentState != 2) {
+			await sleep(100);
+		}
 	}
 
 	export async function seekTo(seconds: number) {
@@ -149,26 +154,37 @@
 					}, 500);
 				},
 				onStateChange: (event: any) => {
-					// YT.PlayerState: ENDED=0, PLAYING=1, PAUSED=2, BUFFERING=3
+					// YT.PlayerState: ENDED=0, PLAYING=1, PAUSED=2, BUFFERING=3, CUED=5
 					if (event.data === 1 || event.data === 2 || event.data === 5) {
 						isEnded = false;
 					}
 
-					console.log("YouTube Player State Changed:", event.data);
+					console.log("YouTube Player State Changed:", event.data, "(previous:", currentState, ")");
+					previousState = currentState;
 					currentState = event.data;
+
 					switch (event.data) {
 						case 1:
+							isBuffering = false;
 							dispatch("play");
 							break;
 						case 2:
 							isBuffering = false;
-							dispatch("pause");
+							if (previousState === 1) {
+								dispatch("pause");
+							} else {
+								console.log(
+									"YouTube: Ignoring pause event (transition from state",
+									previousState,
+									")"
+								);
+							}
 							break;
 						case 3:
 							isBuffering = true;
 							// dispatch("waiting");
 							break;
-						case 0:
+						case 0: // ENDED
 							isEnded = true;
 							dispatch("ended");
 							break;

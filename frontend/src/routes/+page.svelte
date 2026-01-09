@@ -1,21 +1,15 @@
 <script lang="ts">
 	import { onDestroy } from "svelte";
-	import { fade } from "svelte/transition";
-	import {
-		isJoined,
-		cleanupSocket,
-		currentRoomId,
-		leaveRoom,
-		roomError,
-	} from "$lib/stores/socket";
+	import { isJoined, cleanupSocket, currentRoomId, leaveRoom } from "$lib/stores/socket";
 	import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
 	import VideoPlayer from "$lib/components/VideoPlayer.svelte";
 	import UserList from "$lib/components/UserList.svelte";
 	import UrlBar from "$lib/components/UrlBar.svelte";
 	import CollectionManager from "$lib/components/CollectionManager.svelte";
 	import TermsOfService from "$lib/components/TermsOfService.svelte";
+	import Settings from "$lib/components/Settings.svelte";
 
-	let activeTab: "users" | "collections" = "users";
+	let activeTab: "users" | "collections" | "settings" = "users";
 	let showSidebar = false;
 	let tosAccepted = false;
 
@@ -75,7 +69,10 @@
 				</div>
 				<button class="leave-room-btn" on:click={goHome} title="Leave Room">
 					<svg viewBox="0 0 24 24" width="18" height="18">
-						<path fill="currentColor" d="M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z" />
+						<path
+							fill="currentColor"
+							d="M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z"
+						/>
 					</svg>
 					<span>Leave</span>
 				</button>
@@ -93,12 +90,17 @@
 				<button class:active={activeTab === "collections"} on:click={() => (activeTab = "collections")}
 					>Collections</button
 				>
+				<button class:active={activeTab === "settings"} on:click={() => (activeTab = "settings")}
+					>Settings</button
+				>
 			</div>
 			<div class="sidebar-content">
 				{#if activeTab === "users"}
 					<UserList roomId={$currentRoomId} />
-				{:else}
+				{:else if activeTab === "collections"}
 					<CollectionManager />
+				{:else if activeTab === "settings"}
+					<Settings />
 				{/if}
 			</div>
 		</div>
@@ -144,25 +146,24 @@
 				justify-content: center;
 			}
 
-		.mobile-brand {
-			display: flex;
-			align-items: center;
-			gap: 0.8rem;
-            background: none;
-            border: none;
-            padding: 0;
-            cursor: pointer;
-            color: white;
-            font-family: inherit;
+			.mobile-brand {
+				display: flex;
+				align-items: center;
+				gap: 0.8rem;
+				background: none;
+				border: none;
+				padding: 0;
+				cursor: pointer;
+				color: white;
+				font-family: inherit;
 
-			img {
-				height: 32px;
-				width: auto;
+				img {
+					height: 32px;
+					width: auto;
+				}
 			}
-
 		}
 	}
-    }
 
 	.player-area {
 		display: flex;

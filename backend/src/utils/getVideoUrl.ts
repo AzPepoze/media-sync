@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { chromium } from "playwright";
+import { getCachedMediaSource, setCachedMediaSource } from "../store";
 
 const execAsync = promisify(exec);
 
@@ -11,7 +12,12 @@ export interface ResolvedMedia {
 
 const COMMON_VIDEO_EXTENSIONS = [".m3u8", ".mp4", ".webm", ".mkv", ".avi", ".mov", ".flv", ".txt"];
 
-export const resolveVideoUrl = async (url: string): Promise<ResolvedMedia> => {
+export const resolveVideoUrl = async (roomId: string, url: string): Promise<ResolvedMedia> => {
+	// Check cache first
+	const cached = getCachedMediaSource(roomId, url);
+	if (cached) {
+		return cached;
+	}
 	const lowerUrl = url.toLowerCase().split("?")[0];
 
 	if (COMMON_VIDEO_EXTENSIONS.some((ext) => lowerUrl.endsWith(ext))) {
@@ -24,6 +30,7 @@ export const resolveVideoUrl = async (url: string): Promise<ResolvedMedia> => {
 	const normalResult = await ytdlp(url);
 	if (normalResult) {
 		console.log("[YTDLP] Normal Strategy succeeded.");
+		setCachedMediaSource(roomId, url, normalResult.url, normalResult.referer);
 		return normalResult;
 	}
 
@@ -31,6 +38,7 @@ export const resolveVideoUrl = async (url: string): Promise<ResolvedMedia> => {
 	const advancedResult = await ytdlp2(url);
 	if (advancedResult) {
 		console.log("[YTDLP] Advanced Strategy succeeded.");
+		setCachedMediaSource(roomId, url, advancedResult.url, advancedResult.referer);
 		return advancedResult;
 	}
 
@@ -38,6 +46,7 @@ export const resolveVideoUrl = async (url: string): Promise<ResolvedMedia> => {
 	const sniffResult = await sniffVideoUrl(url);
 	if (sniffResult) {
 		console.log("[YTDLP] Sniff Strategy succeeded.");
+		setCachedMediaSource(roomId, url, sniffResult.url, sniffResult.referer);
 		return sniffResult;
 	}
 

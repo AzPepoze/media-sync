@@ -39,7 +39,7 @@ export const registerPlayerHandlers = (io: Server, socket: Socket) => {
 			const isYoutube = /^(https?\:\/\/)?((www\.)?youtube\.com|youtu\.?be)\/.+$/.test(cleanUrl);
 
 			if (!isYoutube) {
-				const resolved = await resolveVideoUrl(cleanUrl);
+				const resolved = await resolveVideoUrl(roomId, cleanUrl);
 				finalUrl = resolved.url;
 				finalReferer = resolved.referer || referer;
 			}

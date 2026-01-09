@@ -47,6 +47,17 @@
 						<strong>User Responsibility:</strong> Users are solely responsible for the content they choose
 						to play and must comply with copyright laws and the terms of the respective video platforms.
 					</li>
+					<li>
+						<strong>Caching Policy:</strong> This website utilizes caching mechanisms (applicable only to
+						streaming content) to prevent redundant data fetching from the origin server and to prevent the
+						origin video server from overloading. Cached data is stored for a short duration, automatically
+						deleted once all users have loaded that chunk, and is not publicly accessible without knowing
+						the room ID.
+					</li>
+					<li>
+						<strong>Server Role:</strong> The underlying concept is similar to screen sharing with friends,
+						but instead of direct sharing, the server manages the video content for synchronized playback.
+					</li>
 				</ul>
 
 				<p class="disclaimer-box">

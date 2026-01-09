@@ -33,7 +33,7 @@ export abstract class BasePlayer {
 
 	abstract play(silent?: boolean): Promise<void> | void;
 	abstract pause(silent?: boolean): void;
-	abstract seek(time: number): void;
+	abstract seek(time: number, silent?: boolean): void;
 	abstract setVolume(volume: number): void;
 	abstract setMute(muted: boolean): void;
 	abstract getCurrentTime(): number;
@@ -54,10 +54,13 @@ export abstract class BasePlayer {
 	}
 
 	updatePlayingState(isPlaying: boolean) {
-		if (this._isPlaying !== isPlaying) {
-			this._isPlaying = isPlaying;
-			this.onPlayingChange?.(isPlaying);
-		}
+		console.log(`[Player] Updating playing state: ${isPlaying}`);
+		this._isPlaying = isPlaying;
+
+		// if (this._isPlaying !== isPlaying) {
+		// 	this._isPlaying = isPlaying;
+		// 	this.onPlayingChange?.(isPlaying);
+		// }
 	}
 }
 
@@ -72,7 +75,15 @@ export class YouTubePlayer extends BasePlayer {
 		super();
 	}
 
+	get isPlaying(): boolean {
+		if (!this.component) return false;
+		const state = this.component.getPlayerState();
+		return state === 1;
+	}
+
 	play(silent: boolean = false) {
+		console.log("[YouTubePlayer] Attempting to play video", silent ? "(silent)" : "");
+
 		if (this.component) {
 			this.isSilentAction = silent;
 			this.component.play();
@@ -80,16 +91,21 @@ export class YouTubePlayer extends BasePlayer {
 		}
 	}
 
-	pause(silent: boolean = false) {
+	async pause(silent: boolean = false) {
+		console.log("[YouTubePlayer] Attempting to pause video", silent ? "(silent)" : "");
+
 		if (this.component) {
 			this.isSilentAction = silent;
-			this.component.pause();
+			await this.component.pause();
 			this.updatePlayingState(false);
 		}
 	}
 
-	seek(time: number) {
-		if (this.component) this.component.seekTo(time);
+	seek(time: number, silent: boolean = false) {
+		if (this.component) {
+			this.isSilentAction = silent;
+			this.component.seekTo(time);
+		}
 	}
 
 	setVolume(volume: number) {
@@ -142,10 +158,18 @@ export class HTML5Player extends BasePlayer {
 		super();
 	}
 
-	async load(url: string, referer: string = "", startTime: number = 0, autoPlay: boolean = false) {
+	async load(
+		url: string,
+		referer: string = "",
+		startTime: number = 0,
+		autoPlay: boolean = false,
+		roomId: string = "",
+		socketId: string = "",
+		forceProxy: boolean = false
+	) {
 		this.destroyInternal(); // Cleanup existing HLS
 
-		const videoUrl = getProxyUrl(url, referer);
+		const videoUrl = getProxyUrl(url, referer, roomId, socketId, forceProxy);
 
 		// Reset basic properties
 		this.videoElement.currentTime = startTime;
@@ -213,6 +237,8 @@ export class HTML5Player extends BasePlayer {
 	}
 
 	async play(silent: boolean = false) {
+		console.log("[HTML5Player] Attempting to play video", silent ? "(silent)" : "");
+
 		this.isSilentAction = silent;
 		try {
 			await this.videoElement.play();
@@ -224,12 +250,18 @@ export class HTML5Player extends BasePlayer {
 	}
 
 	pause(silent: boolean = false) {
+		console.log("[HTML5Player] Attempting to pause video", silent ? "(silent)" : "");
+
 		this.isSilentAction = silent;
 		this.videoElement.pause();
 		this.updatePlayingState(false);
 	}
 
-	seek(time: number) {
+	seek(time: number, silent: boolean = false) {
+		console.log("[HTML5Player] Attempting to seek video", silent ? "(silent)" : "");
+
+		this.isSilentAction = silent;
+
 		if (Number.isFinite(time)) {
 			this.videoElement.currentTime = time;
 		}

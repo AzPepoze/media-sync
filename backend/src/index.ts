@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import proxyRoutes from "./routes/proxy";
+import resolveRoutes from "./routes/resolve";
 import { registerRoomHandlers } from "./handlers/roomHandler";
 import { registerPlayerHandlers } from "./handlers/playerHandler";
 import { rooms } from "./store";
@@ -10,9 +11,11 @@ import { rooms } from "./store";
 const allowedOrigin = process.env.FRONTEND_URL || "*";
 
 const app = express();
-app.use(cors({
-	origin: allowedOrigin,
-}));
+app.use(
+	cors({
+		origin: allowedOrigin,
+	})
+);
 
 app.get("/check-room/:roomId", (req, res) => {
 	const { roomId } = req.params;
@@ -21,6 +24,7 @@ app.get("/check-room/:roomId", (req, res) => {
 });
 
 app.use("/", proxyRoutes);
+app.use("/", resolveRoutes);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {

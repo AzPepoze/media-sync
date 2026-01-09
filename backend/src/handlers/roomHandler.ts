@@ -1,5 +1,5 @@
 import { Server, Socket } from "socket.io";
-import { rooms, roomUsers, roomTimeouts } from "../store";
+import { rooms, roomUsers, roomTimeouts, cleanupRoomCache, removeUserFromPendingChunks } from "../store";
 import { User } from "../types";
 
 const ROOM_CLEANUP_DELAY = 60000; // 1 minute
@@ -71,6 +71,8 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 
 			if (user) {
 				console.log(`[Room] ${user.nickname} left ${roomId}`);
+				// Remove user from pending chunks (so we don't wait for them)
+				removeUserFromPendingChunks(roomId, socket.id);
 			}
 
 			// Broadcast updated list
@@ -83,6 +85,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 					delete rooms[roomId];
 					delete roomUsers[roomId];
 					delete roomTimeouts[roomId];
+					cleanupRoomCache(roomId);
 					console.log(`[Room] ${roomId} deleted`);
 				}, ROOM_CLEANUP_DELAY);
 			} else {

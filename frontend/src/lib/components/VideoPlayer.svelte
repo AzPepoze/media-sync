@@ -24,6 +24,8 @@
 	import NoVideoOverlay from "./player/NoVideoOverlay.svelte";
 	import CorsHelpOverlay from "./player/CorsHelpOverlay.svelte";
 	import YoutubeEmbed from "./player/YoutubeEmbed.svelte";
+	import nativeYouTubeEnabled from "../stores/settings";
+	import { SERVER_URL } from "../stores/socket";
 
 	// Elements & Refs
 	let videoElement: HTMLVideoElement;
@@ -38,21 +40,29 @@
 	let isYoutube = false;
 	let currentLoadedUrl = "";
 	let currentLoadedReferer = "";
+	let cachedResolvedUrl = "";
+	let cachedResolvedReferer = "";
+	let lastNativeYouTubeEnabled: boolean | undefined = undefined;
+	let isLoading = false;
 
 	// Sync State
 	let isRemoteSeeking = false;
 	let isSeeking = false;
-	let isSyncing = false;
 	let localIsBuffering = false;
-	let lastBufferingEnd = 0; // Timestamp of last buffering end to prevent rapid cycles
-	let lastServerAction = 0; // Timestamp of last server action to skip drift checks
+	let lastBufferingEnd = 0;
+	let lastServerAction = 0;
+	let hasEverPlayed = false;
 
 	// Error State
 	let hasError = false;
 	let showCorsHelp = false;
 	let errorMessage = "";
 	let retryCount = 0;
+	let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 	const MAX_RETRIES = 2;
+
+	// Proxy mode - enabled when user chooses to use proxy for CORS issues
+	let forceProxyMode = false;
 
 	// UI State
 	let currentTime = 0;
@@ -70,7 +80,6 @@
 	//-------------------------------------------------------
 	// Core Logic: Load Video
 	//-------------------------------------------------------
-
 	async function loadCurrentVideo() {
 		if (!$roomState?.videoUrl) {
 			console.log("[Sync] No video URL, ending buffering");
@@ -137,9 +146,10 @@
 			// Don't drift check when waiting for others - room time is frozen and will be wrong
 			if ($isWaitingForOthers) {
 				console.log("[Sync] Waiting for others, skipping drift check - just handle play/pause state");
-				// Only handle play/pause state sync
+				// Only handle play/pause state sync - but don't keep calling pause if already paused
 				const shouldBePlaying = $roomState.isPlaying && !$isWaitingForOthers;
-				if (!shouldBePlaying && player.isPlaying) {
+				const isActuallyPlaying = player.isPlaying;
+				if (!shouldBePlaying && isActuallyPlaying) {
 					console.log("[Sync] Pausing playback (waiting for others)");
 					player.pause(true); // silent=true, don't emit
 				}
@@ -193,79 +203,263 @@
 		}
 	}
 
-	async function loadVideo(url: string, referer: string, startTime = 0, shouldPlay = false) {
+	async function loadVideo(
+		url: string,
+		referer: string,
+		startTime = 0,
+		shouldPlay = false,
+		useProxy = false,
+		isRetry = false
+	) {
+		// Prevent concurrent loading
+		if (isLoading) {
+			console.log("[Player] Already loading, skipping...");
+			return;
+		}
+		isLoading = true;
+
+		// Cancel any pending retry
+		if (retryTimeoutId) {
+			clearTimeout(retryTimeoutId);
+			retryTimeoutId = null;
+		}
+
 		localIsBuffering = true;
 		emitBufferingStart();
 
-		// Reset States
+		// Reset States (only reset retryCount on fresh load, not retry)
 		hasError = false;
 		showCorsHelp = false;
 		errorMessage = "";
 		currentTime = startTime;
 		buffered = 0;
-		retryCount = 0;
+		if (!isRetry) {
+			retryCount = 0;
+			// Clear cached resolved URL on fresh load
+			cachedResolvedUrl = "";
+			cachedResolvedReferer = "";
+			// Reset hasEverPlayed for the new video
+			hasEverPlayed = false;
+		}
+
+		// Store the original URL from room state (not the resolved one)
 		currentLoadedUrl = url;
 		currentLoadedReferer = referer;
 
-		const ytId = getYoutubeId(url);
-
-		// Determine Player Type change
-		const targetType = ytId ? "youtube" : "html5";
-
-		// Cleanup if type mismatches
-		if (player && player.type !== targetType) {
-			player.destroy();
-			player = null;
+		// Update proxy mode if specified
+		if (useProxy) {
+			forceProxyMode = true;
 		}
 
-		if (ytId) {
-			isYoutube = true;
-			await tick();
+		let ytId = getYoutubeId(url);
+		let resolvedUrl = url;
+		let resolvedReferer = referer;
 
-			if (!player && ytComponent) {
-				player = new YouTubePlayer(ytComponent);
-				player.setPlayingChangeCallback(() => {
-					// Force reactivity update
-					player = player;
-				});
-			}
-		} else {
-			isYoutube = false;
-			await tick();
-
-			if (!player) {
-				player = new HTML5Player(videoElement, {
-					onManifestParsed: () => {
-						isVideoChanging.set(false);
-					},
-					onError: (type, details, fatal) => {
-						if (details === "manifestLoadError" || details === "fragLoadError") {
-							showCorsHelp = true;
-							localIsBuffering = false;
-							emitBufferingEnd();
-						} else if (fatal) {
-							showError(`Video Error: ${details}`);
+		// If user disabled native YouTube embed, attempt to resolve a direct stream first
+		if (ytId && !$nativeYouTubeEnabled) {
+			// Use cached resolved URL on retry to avoid spamming resolve endpoint
+			if (isRetry && cachedResolvedUrl) {
+				console.log("[Player] Using cached resolved URL for retry");
+				resolvedUrl = cachedResolvedUrl;
+				resolvedReferer = cachedResolvedReferer;
+				ytId = getYoutubeId(resolvedUrl);
+			} else {
+				try {
+					console.log("[Player] Native YouTube disabled - attempting to resolve direct stream...");
+					const res = await fetch(
+						`${SERVER_URL}/resolve?url=${encodeURIComponent(url)}&roomId=${encodeURIComponent($currentRoomId || "")}`
+					);
+					if (res.ok) {
+						const json = await res.json();
+						if (json && json.url) {
+							resolvedUrl = json.url;
+							if (json.referer) resolvedReferer = json.referer;
+							// Cache the resolved URL for retries
+							cachedResolvedUrl = resolvedUrl;
+							cachedResolvedReferer = resolvedReferer;
+							ytId = getYoutubeId(resolvedUrl); // probably null now
+							console.log("[Player] Resolved URL:", resolvedUrl);
 						}
-					},
-				});
-				player.setPlayingChangeCallback(() => {
-					// Force reactivity update
-					player = player;
-				});
+					} else {
+						console.warn("[Player] Resolve endpoint failed, status:", res.status);
+					}
+				} catch (e) {
+					console.warn("[Player] Resolve attempt failed:", e);
+				}
+			}
+		}
+
+		try {
+			// Determine Player Type change
+			const targetType = ytId ? "youtube" : "html5";
+
+			// Cleanup if type mismatches
+			if (player && player.type !== targetType) {
+				player.destroy();
+				player = null;
 			}
 
-			// Load Content
-			if (player instanceof HTML5Player) {
-				await player.load(url, referer, startTime, shouldPlay);
+			if (ytId) {
+				isYoutube = true;
+				await tick();
+
+				if (!player && ytComponent) {
+					player = new YouTubePlayer(ytComponent);
+					// player.setPlayingChangeCallback(() => {
+					// 	// Force reactivity update
+					// 	player = player;
+					// });
+				}
+			} else {
+				isYoutube = false;
+				await tick();
+
+				if (!player) {
+					player = new HTML5Player(videoElement, {
+						onManifestParsed: () => {
+							isVideoChanging.set(false);
+						},
+						onError: (type, details, fatal) => {
+							// Ignore errors if we've already switched to YouTube mode
+							if (isYoutube || $nativeYouTubeEnabled) {
+								console.log("[Player] Ignoring HLS error - already switched to native YouTube");
+								return;
+							}
+
+							// Check if this is a CORS-related error
+							const isCorsError = details === "manifestLoadError" || details === "fragLoadError";
+
+							if (isCorsError) {
+								// Don't show CORS help for YouTube/googlevideo streams - they work without extension
+								const isGoogleVideo =
+									resolvedUrl.includes("googlevideo.com") ||
+									resolvedUrl.includes("youtube.com") ||
+									resolvedUrl.includes("youtu.be");
+								if (isGoogleVideo) {
+									// For YouTube resolved streams, just show generic error and retry
+									console.log(
+										"[Player] YouTube stream error, will retry... (attempt",
+										retryCount + 1,
+										"/",
+										MAX_RETRIES + 1,
+										")"
+									);
+									if (retryCount < MAX_RETRIES) {
+										retryCount++;
+										// Get a fresh resolved URL on retry (YouTube URLs expire)
+										cachedResolvedUrl = ""; // Clear cache to get fresh URL
+										retryTimeoutId = setTimeout(() => {
+											retryTimeoutId = null;
+											// Don't retry if we've switched to native YouTube
+											if ($nativeYouTubeEnabled || isYoutube) {
+												console.log(
+													"[Player] Skipping retry - native YouTube enabled"
+												);
+												isLoading = false;
+												return;
+											}
+											isLoading = false;
+											loadVideo(
+												currentLoadedUrl,
+												currentLoadedReferer,
+												0,
+												false,
+												false,
+												true
+											);
+										}, 2000); // Increase delay to 2 seconds
+										return;
+									}
+									console.log(
+										"[Player] YouTube stream failed after",
+										MAX_RETRIES + 1,
+										"attempts, falling back to native embed"
+									);
+									// Fall back to native YouTube embed instead of showing error
+									// Cancel any pending retries first
+									if (retryTimeoutId) {
+										clearTimeout(retryTimeoutId);
+										retryTimeoutId = null;
+									}
+									isLoading = false;
+									cachedResolvedUrl = "";
+									retryCount = 0;
+									nativeYouTubeEnabled.set(true);
+								} else {
+									// Real CORS issue - show help
+									showCorsHelp = true;
+									localIsBuffering = false;
+									emitBufferingEnd();
+								}
+							} else if (fatal) {
+								showError(`Video Error: ${details}`);
+							}
+						},
+					});
+					// player.setPlayingChangeCallback(() => {
+					// 	// Force reactivity update
+					// 	player = player;
+					// });
+				}
+
+				// Load Content
+				if (player instanceof HTML5Player) {
+					const socketId = $socket?.id || "";
+					await player.load(
+						resolvedUrl,
+						resolvedReferer,
+						startTime,
+						shouldPlay,
+						$currentRoomId,
+						socketId,
+						forceProxyMode
+					);
+				}
 			}
+		} finally {
+			isLoading = false;
 		}
 	}
 
 	//-------------------------------------------------------
-	// Socket Listeners
+	// Socket Listeners & Reactive Statements
 	//-------------------------------------------------------
-	$: if ($roomState) loadCurrentVideo();
-	$: if ($isWaitingForOthers !== undefined) loadCurrentVideo();
+	$: if ($roomState) {
+		console.log("[VideoPlayer] roomState changed, loading current video...");
+		loadCurrentVideo();
+	}
+	$: if ($isWaitingForOthers !== undefined) {
+		console.log("[VideoPlayer] isWaitingForOthers changed, loading current video...");
+		loadCurrentVideo();
+	}
+
+	// Watch for nativeYouTubeEnabled toggle - force reload for YouTube videos
+	$: {
+		if (lastNativeYouTubeEnabled !== undefined && lastNativeYouTubeEnabled !== $nativeYouTubeEnabled) {
+			// Setting changed - check if current video is YouTube
+			const ytId = $roomState?.videoUrl ? getYoutubeId($roomState.videoUrl) : null;
+			if (ytId) {
+				console.log("[Player] Native YouTube setting changed, reloading video...");
+				// Cancel any pending retries
+				if (retryTimeoutId) {
+					clearTimeout(retryTimeoutId);
+					retryTimeoutId = null;
+				}
+				// Force reload by clearing current URL and resetting loading state
+				currentLoadedUrl = "";
+				cachedResolvedUrl = "";
+				cachedResolvedReferer = "";
+				isLoading = false;
+				retryCount = 0;
+				if (player) {
+					player.destroy();
+					player = null;
+				}
+				loadCurrentVideo();
+			}
+		}
+		lastNativeYouTubeEnabled = $nativeYouTubeEnabled;
+	}
 
 	// Helper: sync time if drift is significant
 	function syncTimeIfNeeded(targetTime: number) {
@@ -318,7 +512,7 @@
 				emitBufferingStart();
 
 				console.log("[Player] Executing remote seek to", data.time.toFixed(2));
-				player.seek(data.time);
+				player.seek(data.time, true);
 				return;
 			}
 
@@ -355,10 +549,10 @@
 		console.log("[Youtube] Ready");
 		if (!player && ytComponent) {
 			player = new YouTubePlayer(ytComponent);
-			player.setPlayingChangeCallback(() => {
-				// Force reactivity update
-				player = player;
-			});
+			// player.setPlayingChangeCallback(() => {
+			// 	// Force reactivity update
+			// 	player = player;
+			// });
 		}
 		isVideoChanging.set(false);
 		duration = e.detail.duration;
@@ -382,7 +576,7 @@
 		}
 	}
 
-	function onPlay() {
+	async function onPlay() {
 		console.log(
 			"[Player] onPlay triggered - isSeeking:",
 			isSeeking,
@@ -394,10 +588,13 @@
 			$roomState.isPlaying
 		);
 
+		// Mark that video has played at least once (for buffering detection)
+		hasEverPlayed = true;
+
 		// Check if this was a silent action (sync/server-initiated)
 		const wasSilent = player?.isSilentAction ?? false;
 		if (player) {
-			player.isSilentAction = false; // Reset flag
+			player.isSilentAction = false;
 			player.updatePlayingState(true);
 		}
 
@@ -405,7 +602,8 @@
 		if (isYoutube && localIsBuffering) {
 			console.log("[Youtube] Recovered from Buffering -> Playing");
 			localIsBuffering = false;
-			return;
+			emitBufferingEnd(); // Tell server we're done buffering
+			// Don't return - continue to handle the play event normally
 		}
 
 		// Don't emit if this was a silent action (sync/server-initiated)
@@ -420,9 +618,20 @@
 			return;
 		}
 
-		// User clicked play - emit to server
+		if (player) {
+			console.log("[Player] Pause locally waiting...");
+			await player.pause(true); // silent=true, don't emit pause
+			console.log("[Player] Paused, now emitting play to server");
+		}
+
+		// User clicked play - emit to server and pause locally
+		// Wait for server to send play action back to actually start playing
 		const t = player ? player.getCurrentTime() : 0;
-		console.log("[Player] User play action, emitting at time:", t.toFixed(2));
+		console.log(
+			"[Player] User play action, emitting at time:",
+			t.toFixed(2),
+			"- pausing locally to wait for server"
+		);
 		emitPlay(t);
 	}
 
@@ -471,6 +680,11 @@
 		const wasRemoteSeeking = isRemoteSeeking;
 		console.log("[Player] Seek complete - wasRemoteSeeking:", wasRemoteSeeking);
 
+		if (player?.isSilentAction) {
+			console.log("[Player] Silent seek action, not emitting");
+			player.isSilentAction = false;
+		}
+
 		// Only clear remote seeking flag
 		isRemoteSeeking = false;
 
@@ -500,6 +714,20 @@
 		// Don't trigger buffering if we just finished buffering (debounce)
 		if (Date.now() - lastBufferingEnd < 500) {
 			console.log("[Player] Waiting too soon after buffering end, ignoring");
+			return;
+		}
+		// Don't trigger room-level buffering during initial video load
+		// The initial load is already tracked by localIsBuffering from loadVideo()
+		if (!hasEverPlayed) {
+			console.log("[Player] Waiting during initial load, not emitting buffering_start to room");
+			localIsBuffering = true;
+			return;
+		}
+		// Don't emit buffering if we're not supposed to be playing
+		// This prevents false buffering signals when user clicks play and we pause to wait for server
+		if (!$roomState.isPlaying) {
+			console.log("[Player] Waiting but room is paused, not emitting buffering_start");
+			localIsBuffering = true;
 			return;
 		}
 		if (!localIsBuffering) {
@@ -543,18 +771,42 @@
 	function handleVideoError() {
 		if (isYoutube) return;
 		const err = videoElement.error;
+
+		// Check if this is a YouTube/Google video stream (check both original and cached URL)
+		const isGoogleVideo = currentLoadedUrl.includes("googlevideo.com");
+
 		if (err && (err.code === 2 || err.code === 4)) {
-			showCorsHelp = true;
-			localIsBuffering = false;
-			emitBufferingEnd();
-			return;
+			// Only show CORS help for non-YouTube sources
+			if (!isGoogleVideo) {
+				showCorsHelp = true;
+				localIsBuffering = false;
+				emitBufferingEnd();
+				return;
+			}
+			// For YouTube, fall through to retry logic
 		}
+
 		if (retryCount < MAX_RETRIES) {
 			retryCount++;
 			console.log(`[Player] Retrying load (${retryCount}/${MAX_RETRIES})...`);
-			setTimeout(() => loadVideo(currentLoadedUrl, currentLoadedReferer), 1000);
+			// Clear cached URL to get fresh one on retry (YouTube URLs expire)
+			if (isGoogleVideo) {
+				cachedResolvedUrl = "";
+			}
+			setTimeout(() => {
+				isLoading = false;
+				loadVideo(currentLoadedUrl, currentLoadedReferer, 0, false, false, true);
+			}, 2000);
 		} else {
-			showError("Video load failed.");
+			// For YouTube sources, fall back to native embed instead of showing error
+			if (isGoogleVideo) {
+				console.log("[Player] YouTube stream failed, falling back to native embed");
+				isLoading = false;
+				cachedResolvedUrl = "";
+				nativeYouTubeEnabled.set(true);
+			} else {
+				showError("Video load failed.");
+			}
 		}
 	}
 
@@ -618,7 +870,8 @@
 
 	function initPeekHls() {
 		if (!currentLoadedUrl || peekHls) return;
-		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer);
+		const socketId = $socket?.id || "";
+		const videoUrl = getProxyUrl(currentLoadedUrl, currentLoadedReferer, $currentRoomId, socketId);
 		if (Hls.isSupported() && isHlsSource(currentLoadedUrl)) {
 			peekHls = new Hls({ autoStartLoad: true, maxBufferLength: 1, startLevel: 0 });
 			peekHls.loadSource(videoUrl);
@@ -728,7 +981,7 @@
 	on:mouseleave={() => (showControls = false)}
 >
 	<!-- YouTube Player Component -->
-	{#if isYoutube && getYoutubeId(currentLoadedUrl)}
+	{#if nativeYouTubeEnabled && isYoutube && getYoutubeId(currentLoadedUrl)}
 		<div class="youtube-wrapper">
 			<YoutubeEmbed
 				bind:this={ytComponent}
@@ -751,26 +1004,25 @@
 			<!-- svelte-ignore a11y-no-static-element-interactions -->
 			<div class="yt-click-overlay" on:click={handleVideoClick}></div>
 		</div>
+	{:else}
+		<!-- HTML5 Video Player -->
+		<!-- svelte-ignore a11y-media-has-caption -->
+		<video
+			bind:this={videoElement}
+			playsinline
+			crossorigin="anonymous"
+			on:timeupdate={onTimeUpdate}
+			on:durationchange={() => (duration = videoElement.duration)}
+			on:play={onPlay}
+			on:pause={onPause}
+			on:seeked={onSeeked}
+			on:waiting={onWaiting}
+			on:playing={onPlaying}
+			on:canplay={onCanPlay}
+			on:click={handleVideoClick}
+			on:error={handleVideoError}
+		></video>
 	{/if}
-
-	<!-- HTML5 Video Player -->
-	<!-- svelte-ignore a11y-media-has-caption -->
-	<video
-		bind:this={videoElement}
-		class:hidden={isYoutube}
-		playsinline
-		crossorigin="anonymous"
-		on:timeupdate={onTimeUpdate}
-		on:durationchange={() => (duration = videoElement.duration)}
-		on:play={onPlay}
-		on:pause={onPause}
-		on:seeked={onSeeked}
-		on:waiting={onWaiting}
-		on:playing={onPlaying}
-		on:canplay={onCanPlay}
-		on:click={handleVideoClick}
-		on:error={handleVideoError}
-	></video>
 
 	{#if $isVideoChanging || ($roomState?.videoUrl && (localIsBuffering || $isWaitingForOthers))}
 		<LoadingOverlay isVideoChanging={$isVideoChanging} {localIsBuffering} />
@@ -783,6 +1035,10 @@
 			on:retry={() => {
 				showCorsHelp = false;
 				loadVideo(currentLoadedUrl, currentLoadedReferer);
+			}}
+			on:useProxy={() => {
+				showCorsHelp = false;
+				loadVideo(currentLoadedUrl, currentLoadedReferer, 0, false, true);
 			}}
 		/>
 	{:else if hasError || $roomError}
@@ -871,12 +1127,6 @@
 			position: absolute;
 			top: 0;
 			left: 0;
-		}
-
-		video.hidden {
-			display: none;
-			visibility: hidden;
-			pointer-events: none;
 		}
 
 		.youtube-wrapper {
