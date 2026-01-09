@@ -69,10 +69,9 @@
 	.login-container {
 		display: flex;
 		flex-direction: column;
-		height: 100vh;
-		height: 100dvh;
+		min-height: 100vh;
+		min-height: 100dvh;
 		width: 100%;
-		overflow: hidden;
 		position: relative;
 
 		&::after {
@@ -92,10 +91,12 @@
 		flex: 1;
 		display: flex;
 		width: 100%;
+		max-width: 100vw;
 		z-index: 1;
 
 		@media (max-width: 768px) {
 			flex-direction: column;
+			justify-content: center;
 		}
 	}
 
@@ -151,6 +152,11 @@
 		align-items: center;
 		padding: 2rem;
 		background: transparent;
+		width: 100%;
+
+		@media (max-width: 768px) {
+			padding: 1rem;
+		}
 	}
 
 	.scroll-hint {

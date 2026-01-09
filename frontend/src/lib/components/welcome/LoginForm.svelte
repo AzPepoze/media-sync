@@ -108,6 +108,16 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 20px;
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        margin: 0 auto;
+
+        @media (max-width: 480px) {
+            padding: 1.5rem;
+            border-radius: 16px;
+        }
+
+        @media (max-width: 350px) {
+            padding: 1rem;
+        }
 
         h2 {
             font-size: 2rem;
@@ -156,9 +166,11 @@
             .room-input-wrapper {
                 display: flex;
                 gap: 0.5rem;
+                width: 100%;
 
                 input {
                     flex: 1;
+                    min-width: 0; /* Prevents input from pushing flex container */
                 }
 
                 .random-btn {
