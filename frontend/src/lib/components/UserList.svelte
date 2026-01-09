@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { flip } from "svelte/animate";
+	import { fly, fade } from "svelte/transition";
 	import { users } from "../stores/socket";
 	export let roomId: string;
 
@@ -26,8 +28,13 @@
 	<div class="user-list">
 		<h3>Users ({$users.length})</h3>
 		<ul>
-			{#each $users as user}
-				<li class:buffering={user.isBuffering}>
+			{#each $users as user (user.id)}
+				<li
+					class:buffering={user.isBuffering}
+					animate:flip={{ duration: 300 }}
+					in:fly={{ x: 20, duration: 300 }}
+					out:fade={{ duration: 200 }}
+				>
 					<div class="user-avatar">{user.nickname[0].toUpperCase()}</div>
 					<div class="user-info">
 						<span class="nick">{user.nickname}</span>

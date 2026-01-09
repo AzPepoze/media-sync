@@ -1,7 +1,14 @@
 <script lang="ts">
+	import { onMount } from "svelte";
+	import { fade, fly } from "svelte/transition";
 	import BackgroundManager from "./welcome/BackgroundManager.svelte";
 	import InfoSection from "./welcome/InfoSection.svelte";
 	import LoginForm from "./welcome/LoginForm.svelte";
+
+	let mounted = false;
+	onMount(() => {
+		mounted = true;
+	});
 </script>
 
 <div class="welcome-wrapper">
@@ -9,29 +16,33 @@
 		<!-- Background Layer Managed by Component -->
 		<BackgroundManager />
 
-		<div class="hero-content">
-			<!-- Left Side: Brand -->
-			<div class="brand-section">
-				<div class="brand-content">
-					<img src="/logo.png" alt="Media Sync Logo" class="brand-logo" />
-					<h1>Play Video Together in Real-Time Sync</h1>
-					<p class="tagline">
-						Media Sync lets you watch <strong>YouTube, Twitch, HLS, and direct video files</strong> with
-						friends perfectly synced.
-					</p>
+		{#if mounted}
+			<div class="hero-content">
+				<!-- Left Side: Brand -->
+				<div class="brand-section">
+					<div class="brand-content" in:fly={{ x: -50, duration: 1000, delay: 200 }} out:fade>
+						<img src="/logo.png" alt="Media Sync Logo" class="brand-logo" />
+						<h1>Play Video Together in Real-Time Sync</h1>
+						<p class="tagline">
+							Media Sync lets you watch <strong>YouTube, Twitch, HLS, and direct video files</strong> with
+							friends perfectly synced.
+						</p>
+					</div>
+				</div>
+
+				<!-- Right Side: Floating Form Card -->
+				<div class="form-section">
+					<div in:fly={{ x: 50, duration: 1000, delay: 400 }} out:fade>
+						<LoginForm />
+					</div>
 				</div>
 			</div>
 
-			<!-- Right Side: Floating Form Card -->
-			<div class="form-section">
-				<LoginForm />
+			<div class="scroll-hint" in:fade={{ delay: 1500 }}>
+				<span>How it works & Features</span>
+				<div class="arrow">↓</div>
 			</div>
-		</div>
-
-		<div class="scroll-hint">
-			<span>How it works & Features</span>
-			<div class="arrow">↓</div>
-		</div>
+		{/if}
 	</div>
 
 	<!-- Info Section (Features, About, etc.) -->

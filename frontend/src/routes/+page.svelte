@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { onDestroy } from "svelte";
-	import { isJoined, cleanupSocket, currentRoomId, leaveRoom } from "$lib/stores/socket";
+	import { onDestroy, onMount } from "svelte";
+	import { fade, fly } from "svelte/transition";
+	import { isJoined, cleanupSocket, currentRoomId, leaveRoom, joinRoom } from "$lib/stores/socket";
 	import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
 	import VideoPlayer from "$lib/components/VideoPlayer.svelte";
 	import UserList from "$lib/components/UserList.svelte";
@@ -12,6 +13,34 @@
 	let activeTab: "users" | "collections" | "settings" = "users";
 	let showSidebar = false;
 	let tosAccepted = false;
+	let ready = false;
+
+	onMount(() => {
+		// Small timeout to ensure the DOM is ready for transitions
+		setTimeout(() => {
+			ready = true;
+		}, 100);
+
+		const handlePopState = () => {
+			const params = new URLSearchParams(window.location.search);
+			const roomId = params.get("room_id");
+
+			if (!roomId && $isJoined) {
+				// User clicked back from a room to home
+				isJoined.set(false);
+				currentRoomId.set("");
+			} else if (roomId && !$isJoined) {
+				// User clicked forward to return to a room
+				const savedNick = localStorage.getItem("nickname");
+				if (savedNick) {
+					joinRoom(roomId, savedNick);
+				}
+			}
+		};
+
+		window.addEventListener("popstate", handlePopState);
+		return () => window.removeEventListener("popstate", handlePopState);
+	});
 
 	onDestroy(() => {
 		cleanupSocket();
@@ -33,79 +62,85 @@
 <TermsOfService onAccept={handleTosAccept} />
 
 {#if !$isJoined}
-	<WelcomeScreen />
-{:else}
-	<div class="app-layout">
-		<div class="player-area">
-			<div class="mobile-header">
-				<button class="hamburger" on:click={toggleSidebar} aria-label="Toggle Menu">
-					<svg viewBox="0 0 24 24" width="24" height="24">
-						<path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
-					</svg>
-				</button>
-				<button class="mobile-brand" on:click={goHome}>
-					<img src="/logo.png" alt="Media Sync" />
-					<span>Media Sync</span>
-				</button>
-			</div>
-			<VideoPlayer />
-			<UrlBar />
-		</div>
-
-		{#if showSidebar}
-			<!-- svelte-ignore a11y-click-events-have-key-events -->
-			<!-- svelte-ignore a11y-no-static-element-interactions -->
-			<div class="sidebar-overlay" on:click={toggleSidebar}></div>
-		{/if}
-
-		<div class="sidebar-area" class:mobile-open={showSidebar}>
-			<div class="sidebar-header-wrapper">
-				<div class="sidebar-header">
-					<img src="/logo.png" alt="Media Sync" class="mini-logo" />
-					<div class="header-text">
-						<span class="brand-name">Media Sync</span>
-						<span class="room-id-display">Room: {$currentRoomId}</span>
-					</div>
-				</div>
-				<button class="leave-room-btn" on:click={goHome} title="Leave Room">
-					<svg viewBox="0 0 24 24" width="18" height="18">
-						<path
-							fill="currentColor"
-							d="M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z"
-						/>
-					</svg>
-					<span>Leave</span>
-				</button>
-				<button class="close-sidebar-btn" on:click={toggleSidebar} aria-label="Close Menu">
-					<svg viewBox="0 0 24 24" width="20" height="20">
-						<path
-							fill="currentColor"
-							d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-						/>
-					</svg>
-				</button>
-			</div>
-			<div class="sidebar-tabs">
-				<button class:active={activeTab === "users"} on:click={() => (activeTab = "users")}>Users</button>
-				<button class:active={activeTab === "collections"} on:click={() => (activeTab = "collections")}
-					>Collections</button
-				>
-				<button class:active={activeTab === "settings"} on:click={() => (activeTab = "settings")}
-					>Settings</button
-				>
-			</div>
-			<div class="sidebar-content">
-				{#if activeTab === "users"}
-					<UserList roomId={$currentRoomId} />
-				{:else if activeTab === "collections"}
-					<CollectionManager />
-				{:else if activeTab === "settings"}
-					<Settings />
-				{/if}
-			</div>
-		</div>
+	<div in:fade={{ duration: 400 }} out:fade={{ duration: 200 }}>
+		<WelcomeScreen />
 	</div>
-{/if}
+{:else}
+	<div class="app-layout" in:fade={{ duration: 400 }} out:fade={{ duration: 200 }}>
+			<div class="player-area">
+				<div class="mobile-header">
+					<button class="hamburger" on:click={toggleSidebar} aria-label="Toggle Menu">
+						<svg viewBox="0 0 24 24" width="24" height="24">
+							<path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+						</svg>
+					</button>
+					<button class="mobile-brand" on:click={goHome}>
+						<img src="/logo.png" alt="Media Sync" />
+						<span>Media Sync</span>
+					</button>
+				</div>
+				<VideoPlayer />
+				<UrlBar />
+			</div>
+
+			{#if showSidebar}
+				<!-- svelte-ignore a11y-click-events-have-key-events -->
+				<!-- svelte-ignore a11y-no-static-element-interactions -->
+				<div class="sidebar-overlay" on:click={toggleSidebar} transition:fade={{ duration: 200 }}></div>
+			{/if}
+
+			<div class="sidebar-area" class:mobile-open={showSidebar}>
+				<div class="sidebar-header-wrapper">
+					<div class="sidebar-header">
+						<img src="/logo.png" alt="Media Sync" class="mini-logo" />
+						<div class="header-text">
+							<span class="brand-name">Media Sync</span>
+							<span class="room-id-display">Room: {$currentRoomId}</span>
+						</div>
+					</div>
+					<button class="leave-room-btn" on:click={goHome} title="Leave Room">
+						<svg viewBox="0 0 24 24" width="18" height="18">
+							<path
+								fill="currentColor"
+								d="M14.08,15.59L16.67,13H7V11H16.67L14.08,8.41L15.5,7L20.5,12L15.5,17L14.08,15.59M19,3A2,2 0 0,1 21,5V9.67L19,7.67V5H5V19H19V16.33L21,14.33V19A2,2 0 0,1 19,21H5C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H19Z"
+							/>
+						</svg>
+						<span>Leave</span>
+					</button>
+					<button class="close-sidebar-btn" on:click={toggleSidebar} aria-label="Close Menu">
+						<svg viewBox="0 0 24 24" width="20" height="20">
+							<path
+								fill="currentColor"
+								d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+							/>
+						</svg>
+					</button>
+				</div>
+				<div class="sidebar-tabs">
+					<button class:active={activeTab === "users"} on:click={() => (activeTab = "users")}>Users</button>
+					<button class:active={activeTab === "collections"} on:click={() => (activeTab = "collections")}
+						>Collections</button
+					>
+					<button class:active={activeTab === "settings"} on:click={() => (activeTab = "settings")}
+						>Settings</button
+					>
+				</div>
+				<div class="sidebar-content">
+					{#key activeTab}
+						<div in:fly={{ y: 10, duration: 300, delay: 100 }} out:fade={{ duration: 100 }}>
+							{#if activeTab === "users"}
+								<UserList roomId={$currentRoomId} />
+							{:else if activeTab === "collections"}
+								<CollectionManager />
+							{:else if activeTab === "settings"}
+								<Settings />
+							{/if}
+						</div>
+					{/key}
+				</div>
+			</div>
+		</div>
+	{/if}
 
 <style lang="scss">
 	.app-layout {

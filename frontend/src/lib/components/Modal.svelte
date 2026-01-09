@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fade, scale } from "svelte/transition";
 	export let show = false;
 	export let onClose: (() => void) | null = null;
 </script>
@@ -6,10 +7,10 @@
 {#if show}
 	<!-- svelte-ignore a11y-click-events-have-key-events -->
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="modal-backdrop" on:click={onClose}>
+	<div class="modal-backdrop" on:click={onClose} transition:fade={{ duration: 200 }}>
 		<!-- svelte-ignore a11y-click-events-have-key-events -->
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<div class="modal" on:click|stopPropagation>
+		<div class="modal" on:click|stopPropagation transition:scale={{ duration: 300, start: 0.95, opacity: 0 }}>
 			<slot />
 		</div>
 	</div>

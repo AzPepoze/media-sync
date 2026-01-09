@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { slide, fade, fly } from "svelte/transition";
+	import { flip } from "svelte/animate";
 	import {
 		collections,
 		addCollection,
@@ -79,6 +81,7 @@
 
 	function cancelEditItem() {
 		editingItemId = null;
+		editItemTitle = "";
 		editItemTitle = "";
 		editItemUrl = "";
 		editItemReferer = "";
@@ -188,10 +191,10 @@
 
 	<div class="collections-list">
 		{#each $collections as collection (collection.id)}
-			<div class="collection-item">
+			<div class="collection-item" animate:flip={{ duration: 300 }} in:slide out:fade>
 				<div class="collection-header">
 					{#if editingCollectionId === collection.id}
-						<div class="edit-collection-form">
+						<div class="edit-collection-form" in:fade>
 							<input
 								type="text"
 								bind:value={editCollectionName}
@@ -212,7 +215,7 @@
 							</div>
 						</div>
 					{:else}
-						<div class="header-content">
+						<div class="header-content" in:fade>
 							<span
 								class="name"
 								on:dblclick={() => startRenameCollection(collection.id, collection.name)}
@@ -252,7 +255,7 @@
 				</div>
 
 				{#if activeCollectionId === collection.id}
-					<div class="add-item-form">
+					<div class="add-item-form" transition:slide>
 						<input type="text" bind:value={newItemTitle} placeholder="Title" />
 						<input type="text" bind:value={newItemUrl} placeholder="URL" />
 						<input type="text" bind:value={newItemReferer} placeholder="Referer (Optional)" />
@@ -267,53 +270,59 @@
 
 				<div class="items-list">
 					{#each collection.items as item (item.id)}
-						{#if editingItemId === item.id}
-							<div class="edit-item-form">
-								<input type="text" bind:value={editItemTitle} placeholder="Title" />
-								<input type="text" bind:value={editItemUrl} placeholder="URL" />
-								<input type="text" bind:value={editItemReferer} placeholder="Referer" />
-								<div class="edit-controls">
-									<button
-										class="sm-btn highlight"
-										on:click={() => saveEditItem(collection.id, item.id)}>Save</button
-									>
-									<button class="sm-btn secondary" on:click={cancelEditItem}>Cancel</button>
+						<div animate:flip={{ duration: 300 }}>
+							{#if editingItemId === item.id}
+								<div class="edit-item-form" transition:slide>
+									<input type="text" bind:value={editItemTitle} placeholder="Title" />
+									<input type="text" bind:value={editItemUrl} placeholder="URL" />
+									<input type="text" bind:value={editItemReferer} placeholder="Referer" />
+									<div class="edit-controls">
+										<button
+											class="sm-btn highlight"
+											on:click={() => saveEditItem(collection.id, item.id)}>Save</button
+										>
+										<button class="sm-btn secondary" on:click={cancelEditItem}>Cancel</button>
+									</div>
 								</div>
-							</div>
-						{:else}
-							<div class="media-item">
-								<button class="play-btn" on:click={() => playItem(item)} title="Play Video">
-									▶
-								</button>
-								<div class="info">
-									<span class="title">{item.title}</span>
-									<span class="url">{item.url}</span>
-								</div>
-								<div class="item-controls">
-									<button
-										class="sm-btn"
-										on:click={() => startEditItem(item.id, item)}
-										title="Edit"
-									>
-										Edit
+							{:else}
+								<div
+									class="media-item"
+									in:fly={{ x: 20, duration: 300 }}
+									out:fade
+								>
+									<button class="play-btn" on:click={() => playItem(item)} title="Play Video">
+										▶
 									</button>
-									<button
-										class="sm-btn danger"
-										on:click={() => removeFromCollection(collection.id, item.id)}
-										>Delete</button
-									>
+									<div class="info">
+										<span class="title">{item.title}</span>
+										<span class="url">{item.url}</span>
+									</div>
+									<div class="item-controls">
+										<button
+											class="sm-btn"
+											on:click={() => startEditItem(item.id, item)}
+											title="Edit"
+										>
+											Edit
+										</button>
+										<button
+											class="sm-btn danger"
+											on:click={() => removeFromCollection(collection.id, item.id)}
+											>Delete</button
+										>
+									</div>
 								</div>
-							</div>
-						{/if}
+							{/if}
+						</div>
 					{/each}
 					{#if collection.items.length === 0}
-						<div class="empty-msg">No videos</div>
+						<div class="empty-msg" transition:fade>No videos</div>
 					{/if}
 				</div>
 			</div>
 		{/each}
 		{#if $collections.length === 0}
-			<div class="empty-msg center">No collections created</div>
+			<div class="empty-msg center" transition:fade>No collections created</div>
 		{/if}
 	</div>
 </div>

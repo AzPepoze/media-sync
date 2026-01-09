@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fade, fly } from "svelte/transition";
 	import { roomState, setUrl, currentRoomId, isVideoChanging } from "../stores/socket";
 
 	let inputUrl = "";
@@ -38,7 +39,7 @@
 	}
 </script>
 
-<div class="url-control-panel">
+<div class="url-control-panel" in:fly={{ y: 20, duration: 500, delay: 200 }}>
 	<div class="input-row">
 		<div class="inputs-group">
 			<input
@@ -51,6 +52,9 @@
 		<div class="actions-group">
 			<button class="clear-btn" on:click={handleClear} title="Clear inputs"> Clear </button>
 			<button class="load-btn" on:click={handleLoad} disabled={isLoading}>
+				{#if isLoading}
+					<span class="loading-spinner"></span>
+				{/if}
 				{isLoading ? "Loading..." : "Load"}
 			</button>
 		</div>
@@ -66,11 +70,13 @@
 		margin-top: 1rem;
 		background: $bg-panel;
 		padding: 1rem;
-		border-radius: 8px;
+		border-radius: 12px;
+		border: 1px solid rgba(255, 255, 255, 0.05);
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 
 		.input-row {
 			display: flex;
-			gap: 10px;
+			gap: 12px;
 
 			@media (max-width: 768px) {
 				flex-direction: column;
@@ -87,15 +93,18 @@
 
 				input {
 					flex: 1;
-					padding: 0.8rem;
+					padding: 0.8rem 1rem;
 					background: #0f1115;
 					border: 1px solid #333;
 					color: white;
-					border-radius: 6px;
+					border-radius: 8px;
 					font-size: 0.9rem;
+					transition: all 0.2s;
 					&:focus {
 						border-color: $primary;
 						outline: none;
+						background: #15181d;
+						box-shadow: 0 0 0 2px rgba($primary, 0.2);
 					}
 				}
 			}
@@ -111,11 +120,15 @@
 				button {
 					padding: 0.8rem 1.5rem;
 					border: none;
-					border-radius: 6px;
+					border-radius: 8px;
 					font-weight: bold;
 					cursor: pointer;
-					transition: all 0.2s;
+					transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 					font-size: 1rem;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					gap: 8px;
 
 					@media (max-width: 768px) {
 						flex: 1;
@@ -123,12 +136,13 @@
 						min-height: 50px;
 					}
 
-					&:hover {
+					&:hover:not(:disabled) {
 						filter: brightness(1.1);
+						transform: translateY(-1px);
 					}
 
-					&:active {
-						transform: scale(0.98);
+					&:active:not(:disabled) {
+						transform: translateY(0) scale(0.98);
 					}
 				}
 
@@ -144,13 +158,28 @@
 				.load-btn {
 					background: $primary;
 					color: white;
-					min-width: 100px;
+					min-width: 120px;
 					&:disabled {
-						opacity: 0.5;
+						opacity: 0.6;
 						cursor: not-allowed;
 					}
 				}
 			}
+		}
+	}
+
+	.loading-spinner {
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: white;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
 		}
 	}
 </style>
