@@ -1,63 +1,77 @@
 # Media Sync
 
 <p align="center">
-  <img src="assets/logo.png" alt="Media Sync Logo" width="200" />
+  <img src="assets/logo.png" alt="Media Sync Logo" width="180" />
 </p>
 
-A real-time video watch party application that lets you watch HLS streams together with friends in perfect sync.
+A real-time video synchronization tool designed to watch HLS streams together with friends, featuring advanced bypass for CORS and Referer restrictions.
 
-## What it is?
+## Contents
 
-This app allows multiple users to watch a video at the exact same time. It synchronizes Play, Pause, and Seeking actions across all participants.
+1. [Features](#features)
+2. [Prerequisites](#prerequisites)
+3. [Environment Variables](#environment-variables)
+4. [Installation](#installation)
+5. [Usage](#usage)
 
-**Key Strength:** It includes a smart proxy to bypass CORS, Mixed Content, and Referer protection, allowing you to play streams that are normally blocked (like `.txt` HLS manifests or hotlink-protected videos).
+## Features
 
-## How to use?
+- Real-time synchronization of playback state (Play, Pause, Seek).
+- Advanced video resolver using yt-dlp and browser automation.
+- Built-in proxy to bypass CORS, Referer, and Mixed Content blocks.
+- Smart buffering sync that pauses for everyone if a participant lags.
+- Segment-level caching for improved performance in synchronized rooms.
 
-### 1. Setup & Run
+## Prerequisites
 
-You need to start both the server and the client:
+- Docker and Docker Compose (Recommended)
+- Node.js (LTS version)
+- pnpm
 
-**Backend:** (Runs on port 3001)
+## Environment Variables
+
+Copy the example configuration to create your environment file:
 
 ```bash
+cp .env.example .env
+```
 
+Ensure the following variables are defined:
+- BACKEND_URL: The internal or external address of the backend service.
+- FRONTEND_URL: The address where the web interface is accessible.
+
+## Installation
+
+### Using Docker
+
+The easiest way to deploy the application is using Docker Compose:
+
+```bash
+docker-compose up -d --build
+```
+
+- Frontend: http://localhost:3000
+- Backend: http://localhost:3001
+
+### Local Development
+
+#### Backend
+```bash
 cd backend
-
 pnpm install
-
 pnpm dev
-
 ```
 
-**Frontend:** (Runs on port 5173 for dev, 3000 for Docker/Production)
-
+#### Frontend
 ```bash
-
 cd frontend
-
 pnpm install
-
 pnpm dev
-
 ```
 
-### 2. Join a Room
+## Usage
 
--    Open the app in your browser (usually `http://localhost:5173` for dev or `http://localhost:3000` for Docker).
-
--    Enter your **Nickname** and a **Room ID**.
-
--    Click **Join Room**.
-
-### 3. Load a Video
-
--    **Video URL:** Paste your `.m3u8` or `.txt` HLS link.
--    **Referer URL (Optional):** If the video doesn't load or shows 403, paste the URL of the website where the video came from here.
--    Click **Load**.
-
-### 4. Watch Together
-
--    Everyone in the same room will see the same video.
--    If someone pauses or seeks, it changes for everyone.
--    If a user's connection is slow (buffering), the video will automatically pause for everyone else until they are ready.
+1. Join a Room: Enter a nickname and a unique Room ID.
+2. Load Media: Paste a direct stream link (.m3u8, .mp4) or a supported website URL.
+3. Optional Referer: If the stream is protected, provide the source website URL to bypass 403 errors.
+4. Watch Together: Control actions from any user will sync instantly across all participants.
