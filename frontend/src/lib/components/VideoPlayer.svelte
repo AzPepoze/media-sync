@@ -925,6 +925,8 @@
 	}
 
 	function showControlsTemp() {
+		if (checkIsMobile()) return;
+
 		showControls = true;
 		hideCursor = false;
 		clearTimeout(controlsTimeout);
@@ -938,22 +940,19 @@
 
 	function handleVideoClick(e?: Event) {
 		if (e) {
-			// e.preventDefault();
 			e.stopPropagation();
 		}
 
 		const isMobile = checkIsMobile();
-		console.log("[Video Click] isMobile:", isMobile, "showControls:", showControls);
 		if (isMobile) {
-			if (!showControls) {
-				console.log("[Video Click] Showing controls on mobile");
-				showControlsTemp();
-			} else {
-				console.log("[Video Click] Hiding controls on mobile");
-				if (controlsTimeout) {
-					clearTimeout(controlsTimeout);
-				}
-				showControls = false;
+			showControls = !showControls;
+			clearTimeout(controlsTimeout);
+
+			if (showControls && player?.isPlaying) {
+				// Auto hide after 3 seconds on mobile too
+				controlsTimeout = setTimeout(() => {
+					showControls = false;
+				}, 3000);
 			}
 		} else {
 			togglePlay();
