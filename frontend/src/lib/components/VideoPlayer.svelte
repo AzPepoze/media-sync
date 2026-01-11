@@ -940,6 +940,7 @@
 
 	function handleVideoClick(e?: Event) {
 		if (e) {
+			e.preventDefault();
 			e.stopPropagation();
 		}
 
