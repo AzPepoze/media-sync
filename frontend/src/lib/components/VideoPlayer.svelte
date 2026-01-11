@@ -943,7 +943,8 @@
 		}
 
 		const isMobile = checkIsMobile();
-		if (isMobile || window.innerWidth < 768) {
+		console.log("[UI] Video clicked", isMobile);
+		if (isMobile) {
 			showControls = !showControls;
 			if (showControls) {
 				showControlsTemp();
