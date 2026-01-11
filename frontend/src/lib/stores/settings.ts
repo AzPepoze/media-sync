@@ -1,26 +1,47 @@
 import { writable } from "svelte/store";
 
-const STORAGE_KEY = "nativeYoutubeEnabled";
+const STORAGE_KEY = "media_sync_settings";
 
-function readDefault(): boolean {
+interface Settings {
+	nativeYouTubeEnabled: boolean;
+	useProxy: boolean;
+}
+
+function readDefault(): Settings {
+	const defaultSettings: Settings = {
+		nativeYouTubeEnabled: true,
+		useProxy: false,
+	};
+
+	if (typeof localStorage === "undefined") return defaultSettings;
+
 	try {
 		const v = localStorage.getItem(STORAGE_KEY);
-		if (v === null) return true; // default true
-		return v === "true";
+		if (v === null) {
+			// Migration for old key
+			const oldNative = localStorage.getItem("nativeYoutubeEnabled");
+			if (oldNative !== null) {
+				defaultSettings.nativeYouTubeEnabled = oldNative === "true";
+			}
+			return defaultSettings;
+		}
+		return { ...defaultSettings, ...JSON.parse(v) };
 	} catch (e) {
-		return true;
+		return defaultSettings;
 	}
 }
 
-export const nativeYouTubeEnabled = writable<boolean>(typeof localStorage !== "undefined" ? readDefault() : true);
+export const settings = writable<Settings>(readDefault());
 
 // Persist changes
-nativeYouTubeEnabled.subscribe((val) => {
-	try {
-		localStorage.setItem(STORAGE_KEY, val ? "true" : "false");
-	} catch (e) {
-		// ignore
-	}
-});
+if (typeof localStorage !== "undefined") {
+	settings.subscribe((val) => {
+		try {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(val));
+		} catch (e) {
+			// ignore
+		}
+	});
+}
 
-export default nativeYouTubeEnabled;
+export default settings;

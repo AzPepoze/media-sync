@@ -1,14 +1,17 @@
 <script lang="ts">
-	import { createEventDispatcher } from "svelte";
 	import { fade } from "svelte/transition";
 	import ExtensionGuide from "../ExtensionGuide.svelte";
+	import settings from "../../stores/settings";
 
-	const dispatch = createEventDispatcher<{
-		retry: void;
-		useProxy: void;
-	}>();
+	export let onRetry: () => void;
+	export let onUseProxy: () => void;
 
 	let showExtensionGuide = false;
+
+	function handleUseProxy() {
+		settings.update((s) => ({ ...s, useProxy: true }));
+		onUseProxy();
+	}
 </script>
 
 <div class="overlay-container" transition:fade={{ duration: 200 }}>
@@ -46,7 +49,7 @@
 					{showExtensionGuide ? "Hide Guide" : "Show Extension Guide"}
 				</button>
 
-				<button class="retry-btn" on:click={() => dispatch("retry")}> ↻ I've installed it, Retry </button>
+				<button class="retry-btn" on:click={onRetry}> ↻ I've installed it, Retry </button>
 			</div>
 
 			<div class="divider">
@@ -57,13 +60,13 @@
 				<div class="option-header">
 					<span class="badge mobile">It's ok to use this</span>
 				</div>
-				<h3>🔄 Use my proxy server</h3>
+				<h3>🔄 Use proxy</h3>
 				<p>Route video through my server to bypass CORS.</p>
 				<ul class="cons">
 					<li>⚠ Uses my server bandwidth</li>
 					<li>⚠ May be slower</li>
 				</ul>
-				<button class="option-btn proxy-btn" on:click={() => dispatch("useProxy")}> Use Proxy Mode </button>
+				<button class="option-btn proxy-btn" on:click={handleUseProxy}> Use proxy </button>
 			</div>
 		</div>
 	</div>
@@ -77,7 +80,7 @@
 				<h2>Extension Installation Guide</h2>
 			</div>
 			<ExtensionGuide />
-			<button class="ready-btn" on:click={() => dispatch("retry")}> ✓ I'm Ready, Let's Go! </button>
+			<button class="ready-btn" on:click={onRetry}> ✓ I'm Ready, Let's Go! </button>
 		</div>
 	</div>
 {/if}

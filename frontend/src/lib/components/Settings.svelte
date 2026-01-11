@@ -1,5 +1,5 @@
 <script lang="ts">
-	import nativeYouTubeEnabled from "../stores/settings";
+	import settings from "../stores/settings";
 	import HelpPopup from "./HelpPopup.svelte";
 	import Modal from "./Modal.svelte";
 
@@ -7,7 +7,7 @@
 	let showConfirmDisable = false;
 
 	function confirmDisable() {
-		nativeYouTubeEnabled.set(false);
+		settings.update((s) => ({ ...s, nativeYouTubeEnabled: false }));
 		showConfirmDisable = false;
 	}
 
@@ -23,8 +23,13 @@
 			target.checked = true;
 			showConfirmDisable = true;
 		} else {
-			nativeYouTubeEnabled.set(true);
+			settings.update((s) => ({ ...s, nativeYouTubeEnabled: true }));
 		}
+	}
+
+	function handleProxyToggle(e: Event) {
+		const target = e.target as HTMLInputElement;
+		settings.update((s) => ({ ...s, useProxy: target.checked }));
 	}
 </script>
 
@@ -32,15 +37,29 @@
 	<div class="settings-section">
 		<h3>Video Player</h3>
 		<div class="setting-item">
-			<div class="native-toggle-wrapper">
+			<div class="toggle-wrapper">
 				<label class="switch">
-					<input type="checkbox" checked={$nativeYouTubeEnabled} on:change={handleNativeToggle} />
+					<input
+						type="checkbox"
+						checked={$settings.nativeYouTubeEnabled}
+						on:change={handleNativeToggle}
+					/>
 					<span class="slider"></span>
 				</label>
 				<span class="toggle-label">Native YouTube Player</span>
 				<button class="help-btn" on:click={() => (showEmbedHelp = true)} title="What does this do?"
 					>?</button
 				>
+			</div>
+		</div>
+
+		<div class="setting-item">
+			<div class="toggle-wrapper">
+				<label class="switch">
+					<input type="checkbox" checked={$settings.useProxy} on:change={handleProxyToggle} />
+					<span class="slider"></span>
+				</label>
+				<span class="toggle-label">Use proxy</span>
 			</div>
 		</div>
 	</div>
@@ -95,7 +114,7 @@
 		margin-bottom: 0.75rem;
 	}
 
-	.native-toggle-wrapper {
+	.toggle-wrapper {
 		display: flex;
 		align-items: center;
 		gap: 8px;

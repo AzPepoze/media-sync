@@ -244,11 +244,12 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
-		background: black;
-		z-index: 5;
+		background: rgba(0, 0, 0, 0.8);
+		z-index: 15;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		pointer-events: none;
 	}
 	.replay-btn {
 		background: rgba(255, 255, 255, 0.1);
@@ -258,6 +259,7 @@
 		border-radius: 5px;
 		font-size: 1.2rem;
 		cursor: pointer;
+		pointer-events: auto;
 	}
 	.replay-btn:hover {
 		background: rgba(255, 255, 255, 0.2);
