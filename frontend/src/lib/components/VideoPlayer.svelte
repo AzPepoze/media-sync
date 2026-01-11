@@ -944,11 +944,13 @@
 
 		const isMobile = checkIsMobile();
 		if (isMobile) {
-			showControls = !showControls;
-			if (showControls) {
+			if (!showControls) {
 				showControlsTemp();
 			} else {
-				clearTimeout(controlsTimeout);
+				if (controlsTimeout) {
+					clearTimeout(controlsTimeout);
+				}
+				showControls = false;
 			}
 		} else {
 			togglePlay();
