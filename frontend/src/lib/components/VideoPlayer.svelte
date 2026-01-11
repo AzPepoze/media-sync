@@ -943,10 +943,13 @@
 		}
 
 		const isMobile = checkIsMobile();
+		console.log("[Video Click] isMobile:", isMobile, "showControls:", showControls);
 		if (isMobile) {
 			if (!showControls) {
+				console.log("[Video Click] Showing controls on mobile");
 				showControlsTemp();
 			} else {
+				console.log("[Video Click] Hiding controls on mobile");
 				if (controlsTimeout) {
 					clearTimeout(controlsTimeout);
 				}
