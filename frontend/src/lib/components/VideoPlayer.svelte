@@ -938,12 +938,11 @@
 
 	function handleVideoClick(e?: Event) {
 		if (e) {
-			e.preventDefault();
+			// e.preventDefault();
 			e.stopPropagation();
 		}
 
 		const isMobile = checkIsMobile();
-		console.log("[UI] Video clicked", isMobile);
 		if (isMobile) {
 			showControls = !showControls;
 			if (showControls) {
@@ -1065,7 +1064,7 @@
 		/>
 	{/if}
 
-	<div class="controls-overlay {showControls || !player?.isPlaying ? 'visible' : ''}">
+	<div class="controls-overlay {showControls || !player?.isPlaying ? 'visible' : ''}" on:click={handleVideoClick}>
 		{#if !isYoutube}
 			<div class="peek-video-container" style="display: none;">
 				<!-- svelte-ignore a11y-media-has-caption -->
